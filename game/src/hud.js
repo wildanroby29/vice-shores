@@ -1,183 +1,204 @@
-// The HUD: every system visible at once — job, dispatch, stars, money and
-// clock, weapons, health and armor, minimap, respect, crew, dialogue, radio,
-// vehicle and speed — plus the title screen, the garage shop, pause and
-// busted overlays. The DOM lives in index.html; this module keeps it true.
-import { S, JOBS, CREW, RANKS, RADIO, WEAPONS, rankFor } from './config.js';
-import { currentJob, rankProgress } from './missions.js';
-import { dispatchList } from './police.js';
+// The dense HUD for Vice Shores: job panel, named police dispatch, wanted stars,
+// money and clock, weapon slots, health and armor, minimap, respect ladder, crew
+// abilities, dialogue, radio, and the vehicle readout — all updated every frame.
+import { JOBS, CREW, RANKS, RANK_THRESHOLDS, WEAPONS, RADIO, WORLD } from './config.js';
 
-let minimapCtx = null;
-let minimapCanvas = null;
+export function createHud() {
+  const el = (id) => document.getElementById(id);
+  const jobName = el('hud-job-name');
+  const jobObj = el('hud-job-obj');
+  const jobPay = el('hud-job-pay');
+  const jobBar = el('hud-job-bar');
+  const stars = el('hud-stars');
+  const money = el('hud-money');
+  const clock = el('hud-clock');
+  const radio = el('hud-radio');
+  const dispatch = el('hud-dispatch');
+  const healthBar = el('hud-health-bar');
+  const healthText = el('hud-health-text');
+  const armorBar = el('hud-armor-bar');
+  const armorText = el('hud-armor-text');
+  const rankName = el('hud-rank');
+  const rankBar = el('hud-rank-bar');
+  const rankLadder = el('hud-ladder');
+  const crewRow = el('hud-crew');
+  const weaponsRow = el('hud-weapons');
+  const dialogue = el('hud-dialogue');
+  const message = el('hud-message');
+  const vehicle = el('hud-vehicle');
+  const speed = el('hud-speed');
+  const minimap = el('hud-minimap');
+  const mapCtx = minimap ? minimap.getContext('2d') : null;
 
-function el(id) { return document.getElementById(id); }
-function fmtClock() {
-  const t = Math.floor(S.time) % 86400;
-  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
-  const day = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][Math.floor(S.time / 86400) % 7];
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} · ${day}`;
-}
+  const weaponSlots = {};
+  for (const w of WEAPONS) {
+    const node = document.createElement('div');
+    node.className = 'weapon';
+    node.id = `weapon-${w.slot}`;
+    weaponsRow.appendChild(node);
+    weaponSlots[w.slot] = node;
+  }
+  const crewSlots = {};
+  for (const c of CREW) {
+    const node = document.createElement('div');
+    node.className = 'crew';
+    node.id = `crew-${c.key}`;
+    crewRow.appendChild(node);
+    crewSlots[c.key] = node;
+  }
+  const ladderSlots = {};
+  for (const rank of RANKS) {
+    const node = document.createElement('span');
+    node.className = 'ladder-rank';
+    node.textContent = rank;
+    rankLadder.appendChild(node);
+    ladderSlots[rank] = node;
+  }
 
-export function initHud() {
-  minimapCanvas = el('minimap');
-  if (minimapCanvas) minimapCtx = minimapCanvas.getContext('2d');
-  // Weapon slots.
-  const w = el('weapons');
-  if (w) {
-    w.innerHTML = WEAPONS.map((wp, i) =>
-      `<div class="wslot" id="wslot-${i}"><b>${i + 1}</b> ${wp.name}<span id="wammo-${i}"></span></div>`).join('');
-  }
-  // Crew slots.
-  const c = el('crew');
-  if (c) {
-    c.innerHTML = CREW.map((cr) =>
-      `<div class="crew"><b>${cr.key}</b> ${cr.name} — ${cr.ability}<i>${cr.desc}</i></div>`).join('');
-  }
-  // Respect ladder.
-  const r = el('respect-ladder');
-  if (r) r.innerHTML = RANKS.map((name, i) => `<span id="rank-${i}">${name}</span>`).join('<em>›</em>');
-}
-
-export function setDialogue(text, seconds) {
-  S.dialogue = text; S.dialogueTimer = seconds || 6;
-}
-
-function starsHtml() {
-  let s = '';
-  for (let i = 0; i < 5; i += 1) s += `<span class="${i < S.wanted ? 'on' : ''}">★</span>`;
-  return s;
-}
-
-export function updateHud() {
-  const job = currentJob();
-  const jp = el('job-title');
-  if (jp) jp.textContent = job ? `JOB ${job.id}/8 — ${job.name}` : 'FREE ROAM — VICE SHORES';
-  const jg = el('job-goal');
-  if (jg) jg.textContent = job ? job.goal : 'The city is yours. Drive, steal, survive.';
-  const jpay = el('job-pay');
-  if (jpay) jpay.textContent = job ? `PAYOUT $${job.pay} · ${job.act} · ${job.place}` : `RESPECT ${S.respect} RP`;
-  const dl = el('dispatch-list');
-  if (dl) {
-    const units = dispatchList({ x: S.player ? S.player.x : 0, z: S.player ? S.player.z : 0 });
-    dl.innerHTML = units.length
-      ? units.map((u) => `<div><b>${u.id}</b><span>${u.dist}m</span><i>${u.tactic}</i></div>`).join('')
-      : '<div><b>VSPD</b><span>—</span><i>ALL QUIET</i></div>';
-  }
-  const st = el('stars');
-  if (st) st.innerHTML = starsHtml();
-  const wl = el('wanted-label');
-  if (wl) wl.textContent = S.wanted > 0 ? 'WANTED' : 'CLEAN';
-  const mo = el('money'); if (mo) mo.textContent = `$${S.money.toLocaleString()}`;
-  const cl = el('clock'); if (cl) cl.textContent = fmtClock();
-  const rs = el('radio-song');
-  if (rs) { const r = RADIO[Math.floor(S.clock / 180) % RADIO.length]; el('radio-station').textContent = r.station; rs.textContent = r.song; }
-  for (let i = 0; i < WEAPONS.length; i += 1) {
-    const slot = el(`wslot-${i}`);
-    if (slot) slot.classList.toggle('sel', S.weapon === i);
-    const am = el(`wammo-${i}`);
-    if (am) am.textContent = WEAPONS[i].ammo === Infinity ? '∞' : ` ${WEAPONS[i].ammo}`;
-  }
-  const hb = el('health-bar'); if (hb) hb.style.width = `${S.health}%`;
-  const ab = el('armor-bar'); if (ab) ab.style.width = `${S.armor}%`;
-  const hv = el('health-val'); if (hv) hv.textContent = `HEALTH ${Math.round(S.health)}`;
-  const av = el('armor-val'); if (av) av.textContent = `ARMOR ${Math.round(S.armor)}`;
-  const rp = rankProgress();
-  const rr = el('respect-rank');
-  if (rr) rr.textContent = `${RANKS[rp.rank]} · ${rp.pct}%`;
-  const rb = el('respect-bar'); if (rb) rb.style.width = `${rp.pct}%`;
-  for (let i = 0; i < RANKS.length; i += 1) {
-    const node = el(`rank-${i}`);
-    if (node) node.classList.toggle('cur', i === rp.rank);
-  }
-  const dg = el('dialogue');
-  if (dg) {
-    dg.textContent = S.dialogueTimer > 0 ? S.dialogue : '';
-    dg.style.opacity = S.dialogueTimer > 0 ? '1' : '0';
-  }
-  const vn = el('vehicle-name');
-  if (vn) {
-    if (S.inCar && S.car) {
-      vn.textContent = S.car.model.name.toUpperCase();
-      el('vehicle-cond').textContent = `CONDITION ${Math.round(S.car.condition)}% · ${S.car.burning ? 'ON FIRE' : 'NO NITRO'}`;
-      el('speed').textContent = `${Math.round(Math.abs(S.car.speed) * 3.6)} km/h`;
-    } else {
-      vn.textContent = 'ON FOOT — ROOK';
-      el('vehicle-cond').textContent = 'Find a car — press E near one';
-      el('speed').textContent = '0 km/h';
+  function rankIndex(respect) {
+    let idx = 0;
+    for (let i = 0; i < RANK_THRESHOLDS.length; i += 1) {
+      if (respect >= RANK_THRESHOLDS[i]) idx = i;
     }
+    return idx;
   }
-}
 
-export function drawMinimap() {
-  if (!minimapCtx || !minimapCanvas) return;
-  const g = minimapCtx, W = minimapCanvas.width, H = minimapCanvas.height;
-  const half = 200;
-  const px = (x) => ((x + half) / (half * 2)) * W;
-  const pz = (z) => ((z + half) / (half * 2)) * H;
-  g.clearRect(0, 0, W, H);
-  g.fillStyle = '#0e2a3a'; g.fillRect(0, 0, W, H);
-  g.fillStyle = '#f2d8a0'; g.fillRect(px(178), 0, W - px(178), H); // beach
-  g.fillStyle = '#1e9fc4'; g.fillRect(px(196), 0, W - px(196), H); // ocean
-  g.strokeStyle = '#3a3f4a'; g.lineWidth = 3;
-  for (let v = -182; v <= 182; v += 52) {
-    g.beginPath(); g.moveTo(px(v), 0); g.lineTo(px(v), H); g.stroke();
-    g.beginPath(); g.moveTo(0, pz(v)); g.lineTo(W, pz(v)); g.stroke();
+  function drawMinimap(state, dots) {
+    if (!mapCtx) return;
+    const W = 150;
+    const H = 150;
+    mapCtx.clearRect(0, 0, W, H);
+    mapCtx.fillStyle = 'rgba(10,18,28,0.85)';
+    mapCtx.fillRect(0, 0, W, H);
+    const mx = (x) => ((x - WORLD.minX) / (WORLD.maxX - WORLD.minX)) * W;
+    const mz = (z) => ((z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ)) * H;
+    // Ocean and beach.
+    mapCtx.fillStyle = '#1f8fb8';
+    mapCtx.fillRect(0, 0, mx(WORLD.beachX), H);
+    mapCtx.fillStyle = '#e8cf9a';
+    mapCtx.fillRect(mx(WORLD.beachX), 0, mx(WORLD.oceanX + 8) - mx(WORLD.beachX), H);
+    // Roads.
+    mapCtx.strokeStyle = '#5a6068';
+    mapCtx.lineWidth = 4;
+    for (const x of WORLD.roadXs) {
+      mapCtx.beginPath();
+      mapCtx.moveTo(mx(x), 0);
+      mapCtx.lineTo(mx(x), H);
+      mapCtx.stroke();
+    }
+    for (const z of WORLD.roadZs) {
+      mapCtx.beginPath();
+      mapCtx.moveTo(0, mz(z));
+      mapCtx.lineTo(W, mz(z));
+      mapCtx.stroke();
+    }
+    // Boulevard.
+    mapCtx.strokeStyle = '#7a828c';
+    mapCtx.lineWidth = 7;
+    mapCtx.beginPath();
+    mapCtx.moveTo(mx(WORLD.boulevardX), 0);
+    mapCtx.lineTo(mx(WORLD.boulevardX), H);
+    mapCtx.stroke();
+    // Mission beacon.
+    if (dots.beacon) {
+      mapCtx.fillStyle = '#ffd21f';
+      mapCtx.beginPath();
+      mapCtx.arc(mx(dots.beacon.x), mz(dots.beacon.z), 5, 0, Math.PI * 2);
+      mapCtx.fill();
+    }
+    // Police dots.
+    mapCtx.fillStyle = '#ff4444';
+    for (const p of dots.police || []) {
+      mapCtx.beginPath();
+      mapCtx.arc(mx(p.x), mz(p.z), 3, 0, Math.PI * 2);
+      mapCtx.fill();
+    }
+    // Player arrow.
+    const px = mx(state.player.x);
+    const pz = mz(state.player.z);
+    mapCtx.save();
+    mapCtx.translate(px, pz);
+    mapCtx.rotate(-state.player.heading);
+    mapCtx.fillStyle = '#ffe14d';
+    mapCtx.beginPath();
+    mapCtx.moveTo(6, 0);
+    mapCtx.lineTo(-4, -4);
+    mapCtx.lineTo(-4, 4);
+    mapCtx.closePath();
+    mapCtx.fill();
+    mapCtx.restore();
   }
-  g.strokeStyle = '#f7c948'; g.lineWidth = 4;
-  g.beginPath(); g.moveTo(px(156), 0); g.lineTo(px(156), H); g.stroke();
-  if (S.marker) {
-    g.fillStyle = '#ffc93c';
-    g.beginPath(); g.arc(px(S.marker.x), pz(S.marker.z), 6, 0, 7); g.fill();
-  }
-  for (const car of S.traffic || []) { g.fillStyle = '#e8e8e8'; g.fillRect(px(car.x) - 2, pz(car.z) - 2, 4, 4); }
-  for (const car of S.police || []) { g.fillStyle = '#ff2222'; g.fillRect(px(car.x) - 3, pz(car.z) - 3, 6, 6); }
-  if (S.heli) { g.fillStyle = '#ff2222'; g.beginPath(); g.arc(px(S.heli.x), pz(S.heli.z), 5, 0, 7); g.fill(); }
-  const pp = S.player ? { x: S.player.x, z: S.player.z } : (S.car ? { x: S.car.x, z: S.car.z } : { x: 0, z: 0 });
-  g.fillStyle = '#ffffff';
-  g.beginPath(); g.arc(px(pp.x), pz(pp.z), 5, 0, 7); g.fill();
-  g.fillStyle = '#d7263d';
-  g.beginPath(); g.arc(px(pp.x), pz(pp.z), 3, 0, 7); g.fill();
-}
 
-// --- Overlays ---
-export function showTitle() {
-  el('title-screen').classList.add('show');
-  el('hud').classList.add('dim');
-  el('garage-screen').classList.remove('show');
-  el('pause-screen').classList.remove('show');
-  el('busted-screen').classList.remove('show');
-}
-export function hideTitle() {
-  el('title-screen').classList.remove('show');
-  el('hud').classList.remove('dim');
-}
-export function showGarage() {
-  el('garage-screen').classList.add('show');
-  el('hud').classList.add('dim');
-  const gm = el('garage-money'); if (gm) gm.textContent = `$${S.money.toLocaleString()}`;
-  const gc = el('garage-cond');
-  if (gc && S.car) gc.textContent = `CONDITION ${Math.round(S.car.condition)}%`;
-}
-export function hideGarage() {
-  el('garage-screen').classList.remove('show');
-  el('hud').classList.remove('dim');
-}
-export function showPaused() { el('pause-screen').classList.add('show'); }
-export function hidePaused() { el('pause-screen').classList.remove('show'); }
-export function showBusted() {
-  el('busted-screen').classList.add('show');
-  el('busted-fine').textContent = `BAIL $150 — the VSPD took your cash and dropped you at the safehouse.`;
-}
-export function hideBusted() { el('busted-screen').classList.remove('show'); }
-
-export function fillSaveSlots() {
-  const slots = [
-    { act: 'ACT II — MARKET SQUEEZE', pct: '32.8%', missions: '3/6 missions', place: 'Kumala Strand', money: '$12,650', time: '18:23', rank: 'WHEELMAN' },
-    { act: 'ACT I — NEON RUN', pct: '18.5%', missions: '2/6 missions', place: 'Neon Row', money: '$4,380', time: '09:41', rank: 'HUSTLER' },
-    null,
-  ];
-  const host = el('save-slots');
-  if (!host) return;
-  host.innerHTML = slots.map((s, i) => s
-    ? `<div class="slot"><b>SLOT ${i + 1} · ${s.act}</b><span>${s.pct} complete · ${s.missions} · ${s.place} · ${s.money} · ${s.time}</span><i>Rank ${s.rank}</i></div>`
-    : `<div class="slot empty"><b>SLOT ${i + 1} · EMPTY</b><span>No save yet — start a new game and write your story.</span></div>`).join('');
+  return {
+    update(state, view) {
+      const job = JOBS[state.jobIndex];
+      if (job) {
+        jobName.textContent = `JOB ${job.id}/8 — ${job.name}`;
+        jobObj.textContent = job.blurb;
+        jobPay.textContent = `PAYOUT $${job.payout} · ${job.act} · ${job.place}`;
+        jobBar.style.width = `${Math.round((state.jobProgress || 0) * 100)}%`;
+      }
+      // Wanted stars.
+      let starHtml = '';
+      for (let i = 0; i < 5; i += 1) {
+        starHtml += `<span class="star ${i < state.wanted ? 'lit' : ''}">★</span>`;
+      }
+      stars.innerHTML = starHtml;
+      const hours = Math.floor(state.time);
+      const mins = Math.floor((state.time - hours) * 60);
+      money.textContent = `$${state.money.toLocaleString('en-US')}`;
+      clock.textContent = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')} · ${state.day}`;
+      radio.textContent = `${RADIO[state.radioIndex].station} — ${RADIO[state.radioIndex].song}`;
+      // Dispatch rows.
+      if (view.dispatch && view.dispatch.length > 0) {
+        dispatch.innerHTML = `<div class="dispatch-head">VSPD DISPATCH — POLICE</div>` + view.dispatch.map((d) => (
+          `<div class="dispatch-row"><span>${d.name}</span><span>${d.dist}m</span><span>${d.tactic}</span></div>`
+        )).join('');
+      } else {
+        dispatch.innerHTML = '<div class="dispatch-head">VSPD DISPATCH — POLICE</div><div class="dispatch-row"><span>VSPD</span><span>—</span><span>ALL QUIET</span></div>';
+      }
+      healthBar.style.width = `${Math.max(0, state.health)}%`;
+      healthText.textContent = `HEALTH ${Math.round(state.health)}`;
+      armorBar.style.width = `${Math.max(0, state.armor)}%`;
+      armorText.textContent = `ARMOR ${Math.round(state.armor)}`;
+      const rIdx = rankIndex(state.respect);
+      rankName.textContent = `${RANKS[rIdx]} — ${Math.round((state.respect / RANK_THRESHOLDS[Math.min(rIdx + 1, RANKS.length - 1)]) * 100)}%`;
+      rankBar.style.width = `${Math.min(100, (state.respect / RANK_THRESHOLDS[Math.min(rIdx + 1, RANKS.length - 1)]) * 100)}%`;
+      for (const rank of RANKS) {
+        ladderSlots[rank].classList.toggle('active', RANKS.indexOf(rank) <= rIdx);
+      }
+      // Crew abilities with cooldowns.
+      for (const c of CREW) {
+        const cd = state.crewCooldown[c.key] || 0;
+        crewSlots[c.key].innerHTML = `<b>${c.key} ${c.name} — ${c.ability}</b><span>${cd > 0 ? `READY IN ${Math.ceil(cd)}s` : c.desc}</span>`;
+        crewSlots[c.key].classList.toggle('ready', cd <= 0);
+      }
+      // Weapons.
+      for (const w of WEAPONS) {
+        const ammo = w.ammo === Infinity ? '∞' : (state.ammo[w.slot] ?? 0);
+        weaponSlots[w.slot].innerHTML = `<b>${w.slot}</b> ${w.name} ${ammo}`;
+        weaponSlots[w.slot].classList.toggle('active', state.weaponSlot === w.slot);
+      }
+      dialogue.textContent = state.dialogue || '';
+      dialogue.style.opacity = state.dialogueTimer > 0 ? '1' : '0';
+      message.textContent = state.message || '';
+      message.style.opacity = state.messageTimer > 0 ? '1' : '0';
+      if (view.vehicleName) {
+        vehicle.textContent = `${view.vehicleName} · CONDITION ${Math.round(view.condition)}%${view.nitro ? ' · NITRO' : ' · NO NITRO'}`;
+        speed.textContent = `${Math.round(Math.abs(view.speedKmh))} km/h`;
+      } else {
+        vehicle.textContent = 'ON FOOT — ROOK';
+        speed.textContent = '0 km/h';
+      }
+      drawMinimap(state, view);
+    },
+    showScreen(name) {
+      for (const id of ['screen-title', 'screen-pause', 'screen-busted', 'screen-garage']) {
+        const node = document.getElementById(id);
+        if (node) node.style.display = id === `screen-${name}` ? 'flex' : 'none';
+      }
+      const hud = document.getElementById('hud');
+      if (hud) hud.style.display = name === 'play' ? 'block' : 'none';
+    },
+  };
 }

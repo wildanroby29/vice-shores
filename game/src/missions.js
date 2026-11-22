@@ -1,103 +1,122 @@
-// Missions: Rook's 8 numbered jobs for the fixer Marla. Each job has a name,
-// an act, a place, a payout, an objective and a line of dialogue. The marker
-// is a glowing beacon in the world and on the minimap; reaching it completes
-// the job, pays out, and advances the story. Free roam follows job 8.
-import { S, JOBS, BOULEVARD_X, PIER_Z, GARAGE, SAFEHOUSE, RANK_RP, rankFor } from './config.js';
-import { audio } from './audio.js';
-import { addHeat } from './police.js';
+// Rook's story: eight numbered jobs for the fixer Marla. Each job has a beacon in
+// the world, an objective, and a payout. The module tracks progress and reports
+// what the HUD should show.
+import { JOBS } from './config.js';
 
-const SPOTS = {
-  pier: { x: BOULEVARD_X + 8, z: PIER_Z, label: 'PIER' },
-  palmRow: { x: BOULEVARD_X - 12, z: 52, label: 'PALM ROW' },
-  neonRow: { x: -52, z: 0, label: 'NEON ROW' },
-  market: { x: BOULEVARD_X - 26, z: -52, label: 'MARKET' },
-  marina: { x: BOULEVARD_X + 30, z: PIER_Z + 40, label: 'MARINA' },
-  garage: { x: GARAGE.x - 14, z: GARAGE.z, label: 'DOCKSIDE CUSTOMS' },
-  boulevard: { x: BOULEVARD_X, z: -104, label: 'SUNSET BOULEVARD' },
-  bank: { x: -52, z: -104, label: 'SHORE BANK' },
-  safehouse: { x: SAFEHOUSE.x, z: SAFEHOUSE.z, label: 'SAFEHOUSE' },
-};
+export function createMissions(THREE, scene) {
+  // The beacon: a tall golden pillar of light plus a floating diamond marker.
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0xffd21f, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
+  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 30, 12, 1, true), beaconMat);
+  beacon.position.y = 15;
+  scene.add(beacon);
+  const diamondMat = new THREE.MeshBasicMaterial({ color: 0xffd21f });
+  const diamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.9), diamondMat);
+  diamond.position.y = 4.5;
+  scene.add(diamond);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd21f, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 3.0, 24), ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.12;
+  scene.add(ring);
 
-const JOB_SPOTS = [SPOTS.pier, SPOTS.palmRow, SPOTS.neonRow, SPOTS.market, SPOTS.marina, SPOTS.garage, SPOTS.boulevard, SPOTS.bank];
+  let current = 0;
+  let collectCount = 0;
+  let surviveTimer = 0;
 
-let beacon = null;
-
-export function currentJob() { return JOBS[S.jobIndex] || null; }
-
-export function startJob(scene) {
-  const job = currentJob();
-  if (!job) { S.marker = null; return; }
-  const spot = JOB_SPOTS[S.jobIndex];
-  S.marker = { x: spot.x, z: spot.z, label: spot.label };
-  S.jobDone = false;
-  S.jobTimer = 0;
-  S.heatTimer = 0;
-  S.dialogue = `Marla: ${job.line}`;
-  S.dialogueTimer = 8;
-  if (!beacon) {
-    beacon = new THREE.Group();
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 42, 10, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }));
-    beam.position.y = 21; beacon.add(beam);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.22, 8, 24),
-      new THREE.MeshBasicMaterial({ color: 0xffc93c }));
-    ring.rotation.x = Math.PI / 2; ring.position.y = 0.3; beacon.add(ring);
-    scene.add(beacon);
+  function placeFor(jobIndex) {
+    const job = JOBS[jobIndex];
+    if (!job) return;
+    beacon.position.x = job.target.x;
+    beacon.position.z = job.target.z;
+    diamond.position.x = job.target.x;
+    diamond.position.z = job.target.z;
+    ring.position.x = job.target.x;
+    ring.position.z = job.target.z;
+    beacon.visible = true;
+    diamond.visible = true;
+    ring.visible = true;
   }
-  beacon.position.set(spot.x, 0, spot.z);
-  beacon.visible = true;
-}
 
-export function completeJob(scene) {
-  const job = currentJob();
-  if (!job || S.jobDone) return;
-  S.jobDone = true;
-  S.money += job.pay;
-  S.respect += job.pay;
-  S.dialogue = `Marla: Job done. $${job.pay} is yours, Rook.`;
-  S.dialogueTimer = 6;
-  audio.jingle();
-  if (beacon) beacon.visible = false;
-  S.jobIndex += 1;
-  if (currentJob()) startJob(scene);
-  else {
-    S.marker = null;
-    S.dialogue = 'Marla: That is all eight jobs, Rook. The city is yours now — free roam.';
-    S.dialogueTimer = 10;
+  function hide() {
+    beacon.visible = false;
+    diamond.visible = false;
+    ring.visible = false;
   }
-}
 
-export function updateMissions(scene, dt, playerPos) {
-  const job = currentJob();
-  if (!job || S.jobDone) return;
-  S.jobTimer += dt;
-  const spot = JOB_SPOTS[S.jobIndex];
-  const d = Math.hypot(playerPos.x - spot.x, playerPos.z - spot.z);
-  // Job 3 is "lose the heat": complete when wanted drops to 0 after having it.
-  if (job.id === 3) {
-    if (S.wanted > 0) S.heatTimer = 0;
-    else if (S.jobTimer > 5) { completeJob(scene); return; }
-  }
-  // Job 7 is "survive 60s at 4+ stars".
-  if (job.id === 7) {
-    if (S.wanted >= 4) S.heatTimer += dt;
-    if (S.heatTimer >= 60) { completeJob(scene); return; }
-  }
-  // Job 5 is a timed race to the marina.
-  if (job.id === 5 && S.jobTimer > 90) {
-    S.dialogue = 'Marla: Too slow, Rook. The marina job is off — try the next one.';
-    S.dialogueTimer = 6;
-    S.jobIndex += 1;
-    if (currentJob()) startJob(scene);
-    return;
-  }
-  if (d < 6) completeJob(scene);
-  if (beacon) beacon.rotation.y += dt * 1.5;
-}
-
-export function rankProgress() {
-  const r = rankFor(S.respect);
-  const next = RANK_RP[r + 1] || RANK_RP[RANK_RP.length - 1];
-  const prev = RANK_RP[r];
-  return { rank: r, pct: next === prev ? 100 : Math.round(((S.respect - prev) / (next - prev)) * 100) };
+  return {
+    get current() { return current; },
+    get collectCount() { return collectCount; },
+    placeFor,
+    hide,
+    start(jobIndex) {
+      current = jobIndex;
+      collectCount = 0;
+      surviveTimer = 0;
+      placeFor(jobIndex);
+    },
+    // Called every step with the player's position and state; returns 'done' |
+    // 'progress' | null. `ctx` carries the live state the job needs.
+    update(dt, t, px, pz, state) {
+      const job = JOBS[current];
+      if (!job) return null;
+      diamond.rotation.y = t * 1.5;
+      diamond.position.y = 4.5 + Math.sin(t * 2) * 0.4;
+      ring.scale.setScalar(1 + Math.sin(t * 3) * 0.12);
+      const dx = px - job.target.x;
+      const dz = pz - job.target.z;
+      const dist = Math.hypot(dx, dz);
+      if (job.kind === 'survive') {
+        surviveTimer += dt;
+        state.jobProgress = Math.min(1, surviveTimer / 60);
+        if (state.wanted >= 4 && surviveTimer >= 60) return 'done';
+        return 'progress';
+      }
+      if (job.kind === 'collect') {
+        // Three drops along the boulevard: the beacon walks to the next drop.
+        if (dist < 4) {
+          collectCount += 1;
+          state.jobProgress = collectCount / 3;
+          if (collectCount >= 3) return 'done';
+          const drops = [{ x: -52, z: -30 }, { x: -52, z: 30 }, { x: -52, z: 60 }];
+          const next = drops[Math.min(collectCount, 2)];
+          beacon.position.x = next.x;
+          beacon.position.z = next.z;
+          diamond.position.x = next.x;
+          diamond.position.z = next.z;
+          ring.position.x = next.x;
+          ring.position.z = next.z;
+          return 'progress';
+        }
+        return null;
+      }
+      if (dist < 4) {
+        state.jobProgress = 1;
+        return 'done';
+      }
+      return null;
+    },
+    complete(state) {
+      const job = JOBS[current];
+      if (!job) return 0;
+      state.jobDone[current] = true;
+      state.money += job.payout;
+      state.respect += 400 + job.payout;
+      current = Math.min(JOBS.length - 1, current + 1);
+      if (current < JOBS.length && !JOBS.slice(0, current).every((_, i) => state.jobDone[i])) {
+        // All jobs done: free roam.
+      }
+      if (state.jobDone.every(Boolean)) {
+        hide();
+        return job.payout;
+      }
+      placeFor(current);
+      return job.payout;
+    },
+    job() {
+      return JOBS[current];
+    },
+    allDone(state) {
+      return state.jobDone.every(Boolean);
+    },
+  };
 }
