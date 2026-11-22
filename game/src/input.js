@@ -1,96 +1,118 @@
-// Keyboard and pointer input. Held keys give a move vector; one-shot presses
-// (enter/exit a car, shoot, pause, mute, confirm) are queued as bit flags
-// and taken once by the loop, so a press between two frames is never lost
-// and never counted twice.
+// Keyboard and pointer input. WASD/arrows move, Shift sprints, Space/click shoots,
+// E enters cars / interacts, P or Esc pauses, M mutes, G opens the garage, 1/2/3 pick a
+// weapon, Q cycles weapons. The pointer gives an aim point on the ground (the renderer
+// raycasts the mouse ray onto y = 0), so shooting on foot aims where the player looks.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
-export const ACTION_ENTER = 4;
-export const ACTION_SHOOT = 8;
-export const ACTION_MUTE = 16;
+export function createInput() {
+  const keys = new Set();
+  const state = {
+    keys,
+    pointerDown: false,
+    mouseX: 0,
+    mouseY: 0,
+    mouseNdcX: 0,
+    mouseNdcY: 0,
+    /** Edge-triggered presses consumed once by the world (E, pause, weapon keys...). */
+    pressed: [],
+  };
 
-const UP = new Set(['ArrowUp', 'KeyW']);
-const DOWN = new Set(['ArrowDown', 'KeyS']);
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const SPRINT = new Set(['ShiftLeft', 'ShiftRight']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
-const ENTER = new Set(['KeyE']);
-const MUTE = new Set(['KeyM']);
+  const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+  const CONSUME_KEYS = ['KeyE', 'KeyP', 'Escape', 'KeyM', 'KeyG', 'KeyQ', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Enter'];
 
-export function createInput(target) {
-  const held = new Set();
-  let actions = 0;
-  let mouse = { x: 0, y: 0, down: false, clicked: false };
+  function keyName(e) {
+    return e.code || e.key;
+  }
 
-  window.addEventListener('keydown', (event) => {
-    if (UP.has(event.code) || DOWN.has(event.code) || LEFT.has(event.code) || RIGHT.has(event.code) || SPRINT.has(event.code)) {
-      held.add(event.code);
-    } else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM | ACTION_SHOOT;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else if (ENTER.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_ENTER;
-    } else if (MUTE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_MUTE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    held.delete(event.code);
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    held.clear();
-    mouse.down = false;
-  });
-  target.addEventListener('pointermove', (event) => {
-    mouse.x = event.clientX;
-    mouse.y = event.clientY;
-  });
-  target.addEventListener('pointerdown', (event) => {
-    mouse.x = event.clientX;
-    mouse.y = event.clientY;
-    mouse.down = true;
-    mouse.clicked = true;
-    actions |= ACTION_CONFIRM;
-  });
-  target.addEventListener('pointerup', () => {
-    mouse.down = false;
-  });
+  function onKeyDown(e) {
+    const k = keyName(e);
+    if (MOVE_KEYS.includes(k) || CONSUME_KEYS.includes(k) || k === 'Space' || k === 'ShiftLeft' || k === 'ShiftRight') {
+      e.preventDefault();
+    }
+    if (!e.repeat && CONSUME_KEYS.includes(k)) state.pressed.push(k);
+    keys.add(k);
+  }
 
-  function axis(neg, pos) {
-    return (held.has(pos) ? 1 : 0) - (held.has(neg) ? 1 : 0);
+  function onKeyUp(e) {
+    keys.delete(keyName(e));
+  }
+
+  function onPointerMove(e) {
+    state.mouseX = e.clientX;
+    state.mouseY = e.clientY;
+    state.mouseNdcX = (e.clientX / window.innerWidth) * 2 - 1;
+    state.mouseNdcY = -(e.clientY / window.innerHeight) * 2 + 1;
+  }
+
+  function onPointerDown(e) {
+    state.pointerDown = true;
+    onPointerMove(e);
+  }
+
+  function onPointerUp() {
+    state.pointerDown = false;
+  }
+
+  function attach() {
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('blur', onBlur);
+  }
+
+  function onBlur() {
+    keys.clear();
+    state.pointerDown = false;
+  }
+
+  function detach() {
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('blur', onBlur);
+  }
+
+  /** Move input as a unit vector in world XZ: x east, z south. */
+  function moveVector() {
+    let x = 0;
+    let z = 0;
+    if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
+    if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
+    if (keys.has('KeyW') || keys.has('ArrowUp')) z -= 1;
+    if (keys.has('KeyS') || keys.has('ArrowDown')) z += 1;
+    if (x !== 0 && z !== 0) {
+      const inv = 1 / Math.hypot(x, z);
+      x *= inv;
+      z *= inv;
+    }
+    return { x, z };
+  }
+
+  function consume(code) {
+    const i = state.pressed.indexOf(code);
+    if (i >= 0) {
+      state.pressed.splice(i, 1);
+      return true;
+    }
+    return false;
+  }
+
+  function endFrame() {
+    state.pressed.length = 0;
   }
 
   return {
-    /** Normalised {x, y} move vector from the held keys. */
-    moveVector() {
-      const x = axis('ArrowLeft', 'ArrowRight') || axis('KeyA', 'KeyD');
-      const y = axis('ArrowUp', 'ArrowDown') || axis('KeyW', 'KeyS');
-      const length = Math.hypot(x, y);
-      if (length === 0) return { x: 0, y: 0 };
-      return { x: x / length, y: y / length };
-    },
-    sprinting() {
-      return held.has('ShiftLeft') || held.has('ShiftRight');
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-    /** The mouse position in screen pixels, and whether it was just clicked. */
-    takeMouse() {
-      const clicked = mouse.clicked;
-      mouse.clicked = false;
-      return { x: mouse.x, y: mouse.y, clicked, down: mouse.down };
-    },
-    mousePosition() {
-      return { x: mouse.x, y: mouse.y };
-    },
+    state,
+    attach,
+    detach,
+    moveVector,
+    consume,
+    endFrame,
+    isDown: (code) => keys.has(code),
+    sprint: () => keys.has('ShiftLeft') || keys.has('ShiftRight'),
+    shootHeld: () => keys.has('Space') || state.pointerDown,
   };
 }

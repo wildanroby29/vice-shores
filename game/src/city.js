@@ -1,211 +1,181 @@
-// Vice Shores' city: a street grid, blocks of buildings, two parks, two
-// parking lots, a beach and water on the south edge, a river and one bridge
-// on the east edge. Everything here is deterministic for a seed: the same
-// seed always builds the same city, the same traffic loops and the same
-// pedestrian routes.
-import { WORLD, STREETS_X, STREETS_Y, ROAD_HALF, BEACH_Y, WATER_Y, RIVER_X, BRIDGE_Y, PALETTE } from './config.js';
+// Vice Shores city layout on the XZ plane (x east, z south, ground y = 0). The same grid
+// the 2D draft used, now as real 3D footprints: roads, blocks, parks, lots, the beach,
+// the river and the bridge, plus every mission landmark. Collision is circle-vs-rect in
+// XZ, so the world rules never have to know about three.js.
 
-function rectsOverlap(a, b) {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-}
+import { CITY, NEON_SIGNS } from './config.js';
+import { createRandom, pick, range } from './random.js';
 
-function pointInRect(x, y, r) {
-  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
-}
+export const ROADS_V = [300, 780, 1260, 1740, 2220]; // roads running north-south (along z)
+export const ROADS_H = [300, 700, 1100, 1500]; // roads running east-west (along x)
+export const ROAD_W = 96;
+export const BEACH_Z = 1700;
+export const WATER_Z = 1760;
+export const RIVER_X = 2380;
 
-/** True when the segment (ax,ay)-(bx,by) touches rect r (for line of sight). */
-function segmentHitsRect(ax, ay, bx, by, r) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  let tmin = 0;
-  let tmax = 1;
-  if (dx === 0) {
-    if (ax < r.x || ax > r.x + r.w) return false;
-  } else {
-    let t1 = (r.x - ax) / dx;
-    let t2 = (r.x + r.w - ax) / dx;
-    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-    tmin = Math.max(tmin, t1);
-    tmax = Math.min(tmax, t2);
-    if (tmin > tmax) return false;
-  }
-  if (dy === 0) {
-    if (ay < r.y || ay > r.y + r.h) return false;
-  } else {
-    let t1 = (r.y - ay) / dy;
-    let t2 = (r.y + r.h - ay) / dy;
-    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-    tmin = Math.max(tmin, t1);
-    tmax = Math.min(tmax, t2);
-    if (tmin > tmax) return false;
-  }
-  return true;
-}
+export const SPOTS = {
+  safehouse: { x: 540, z: 500, label: 'SAFEHOUSE' },
+  garage: { x: 1500, z: 500, label: 'GARAGE' },
+  bank: { x: 1020, z: 500, label: 'BANK' },
+  hotel: { x: 1980, z: 900, label: 'HOTEL CORAL' },
+  pier: { x: 1260, z: 1700, label: 'PIER 9' },
+  coupe: { x: 300, z: 560, label: 'BLUE COUPE' },
+  coralRow: { x: 2220, z: 300, label: 'CORAL ROW' },
+  package: { x: 1020, z: 900, label: 'PACKAGE' },
+  airportRd: { x: 2220, z: 1500, label: 'AIRPORT RD' },
+  sportCar: { x: 1500, z: 1300, label: 'SPORTS CAR' },
+  lotA: { x: 1020, z: 1300, label: 'LOT A' },
+  lotB: { x: 1500, z: 1300, label: 'LOT B' },
+  palmPark: { x: 1020, z: 900, label: 'PALM PARK' },
+  coralPark: { x: 1980, z: 500, label: 'CORAL PARK' },
+  beach: { x: 1260, z: 1730, label: 'BEACH' },
+};
 
-export function isWater(x, y) {
-  if (y > WATER_Y) return true;
-  if (x > RIVER_X) {
-    // The bridge at BRIDGE_Y carries the road across the river.
-    if (Math.abs(y - BRIDGE_Y) <= ROAD_HALF) return false;
-    return true;
-  }
-  return false;
-}
+const COLS = [
+  [60, 252],
+  [348, 732],
+  [828, 1212],
+  [1308, 1692],
+  [1788, 2172],
+  [2268, 2380],
+];
+const ROWS = [
+  [60, 252],
+  [348, 652],
+  [748, 1052],
+  [1148, 1452],
+  [1548, 1692],
+];
 
-export function isBeach(x, y) {
-  return y > BEACH_Y && y <= WATER_Y && x <= RIVER_X;
-}
+const LANDMARKS = {
+  '1,1': { kind: 'safehouse', sign: 'SAFEHOUSE', h: 34 },
+  '2,1': { kind: 'bank', sign: 'BANK', h: 70 },
+  '3,1': { kind: 'garage', sign: 'GARAGE', h: 40 },
+  '4,2': { kind: 'hotel', sign: 'HOTEL CORAL', h: 120 },
+};
+const PARKS = ['2,2', '4,1'];
+const LOTS = ['2,3', '3,3'];
 
-export function buildCity(random) {
+export function buildCity(seed) {
+  const random = createRandom(seed);
   const buildings = [];
-  const parks = [];
-  const lots = [];
-  const trees = [];
-  const parkedSpots = [];
+  const palms = [];
+  const solids = [];
+  let signIdx = 0;
 
-  // Block bands between street centrelines (plus the world edges).
-  const xBands = [0, ...STREETS_X, WORLD.width];
-  const yBands = [0, ...STREETS_Y, BEACH_Y];
-  // Two park blocks and two parking-lot blocks, picked by band indices.
-  const parkCells = new Set(['2,2', '4,1']);
-  const lotCells = new Set(['1,3', '3,2']);
-
-  for (let bi = 0; bi < xBands.length - 1; bi += 1) {
-    for (let bj = 0; bj < yBands.length - 1; bj += 1) {
-      const x0 = xBands[bi] + (bi === 0 ? 24 : ROAD_HALF);
-      const x1 = xBands[bi + 1] - (bi === xBands.length - 2 ? 24 : ROAD_HALF);
-      const y0 = yBands[bj] + (bj === 0 ? 24 : ROAD_HALF);
-      const y1 = yBands[bj + 1] - (bj === yBands.length - 2 ? 24 : ROAD_HALF);
-      const key = `${bi},${bj}`;
-      const block = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-      if (block.w < 60 || block.h < 60) continue;
-      if (parkCells.has(key)) {
-        parks.push(block);
-        const treeCount = Math.floor((block.w * block.h) / 9000);
-        for (let i = 0; i < treeCount; i += 1) {
-          trees.push({ x: random.range(block.x + 16, block.x + block.w - 16), y: random.range(block.y + 16, block.y + block.h - 16) });
-        }
-        continue;
-      }
-      if (lotCells.has(key)) {
-        lots.push(block);
-        const rows = Math.max(1, Math.floor(block.h / 64));
-        for (let r = 0; r < rows; r += 1) {
-          const y = block.y + 34 + r * 64;
-          for (let x = block.x + 30; x < block.x + block.w - 30; x += 62) {
-            if (random.next() < 0.55) parkedSpots.push({ x, y, angle: 0, color: random.pick(PALETTE.traffic) });
-          }
-        }
-        continue;
-      }
-      // Buildings: split the block into a 2x2 grid of plots with alleys.
-      const cols = block.w > 300 ? 2 : 1;
-      const rows = block.h > 300 ? 2 : 1;
-      for (let c = 0; c < cols; c += 1) {
-        for (let r = 0; r < rows; r += 1) {
-          if (random.next() < 0.12) continue; // an empty plaza plot
-          const px = block.x + (c * block.w) / cols + 10;
-          const py = block.y + (r * block.h) / rows + 10;
-          const pw = block.w / cols - 20;
-          const ph = block.h / rows - 20;
-          const colorIndex = random.int(0, PALETTE.building.length - 1);
-          buildings.push({
-            x: px, y: py, w: pw, h: ph,
-            color: PALETTE.building[colorIndex],
-            roof: PALETTE.buildingRoof[colorIndex],
-            neon: random.next() < 0.4,
-            neonColor: random.pick([PALETTE.neonPink, PALETTE.neonCyan, PALETTE.neonYellow]),
-          });
-        }
-      }
+  for (let c = 0; c < COLS.length; c++) {
+    for (let r = 0; r < ROWS.length; r++) {
+      const key = `${c},${r}`;
+      if (PARKS.includes(key) || LOTS.includes(key)) continue;
+      const [x0, x1] = COLS[c];
+      const [z0, z1] = ROWS[r];
+      const cx = (x0 + x1) / 2;
+      const cz = (z0 + z1) / 2;
+      const w = x1 - x0 - 24;
+      const d = z1 - z0 - 24;
+      const lm = LANDMARKS[key];
+      const h = lm ? lm.h : Math.round(range(random, 42, 132));
+      const sign = lm ? lm.sign : (random() < 0.55 ? NEON_SIGNS[signIdx++ % NEON_SIGNS.length] : '');
+      const hue = pick(random, [0x3a4260, 0x46355e, 0x2f4a5e, 0x4a3a52, 0x37425e]);
+      const b = { x: cx, z: cz, w, d, h, sign, color: hue, kind: lm ? lm.kind : 'block' };
+      buildings.push(b);
+      solids.push({ x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2 });
     }
   }
 
-  // Traffic loops: rectangles around interior blocks, on street centrelines.
-  const trafficLoops = [];
-  for (let bi = 1; bi < xBands.length - 2; bi += 1) {
-    for (let bj = 1; bj < yBands.length - 2; bj += 1) {
-      const x0 = xBands[bi];
-      const x1 = xBands[bi + 1];
-      const y0 = yBands[bj];
-      const y1 = yBands[bj + 1];
-      trafficLoops.push([
-        { x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 },
-      ]);
+  // Palm Park and Coral Park: palms + a few benches (no solids, palms are decoration).
+  for (const key of PARKS) {
+    const [c, r] = key.split(',').map(Number);
+    const [x0, x1] = COLS[c];
+    const [z0, z1] = ROWS[r];
+    for (let i = 0; i < 10; i++) {
+      palms.push({ x: range(random, x0 + 30, x1 - 30), z: range(random, z0 + 30, z1 - 30), s: range(random, 0.85, 1.35) });
     }
   }
-  // Pedestrian routes: rectangles around blocks, on the sidewalks.
-  const pedRoutes = [];
-  for (let bi = 0; bi < xBands.length - 1; bi += 1) {
-    for (let bj = 0; bj < yBands.length - 1; bj += 1) {
-      const x0 = xBands[bi] + (bi === 0 ? 30 : ROAD_HALF + 10);
-      const x1 = xBands[bi + 1] - (bi === xBands.length - 2 ? 30 : ROAD_HALF + 10);
-      const y0 = yBands[bj] + (bj === 0 ? 30 : ROAD_HALF + 10);
-      const y1 = yBands[bj + 1] - (bj === yBands.length - 2 ? 30 : ROAD_HALF + 10);
-      if (x1 - x0 < 80 || y1 - y0 < 80) continue;
-      pedRoutes.push([
-        { x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 },
-      ]);
-    }
+  // Boulevard palms along the beachfront road (z = 1500) and on the sand.
+  for (let x = 120; x < 2380; x += 190) {
+    palms.push({ x: x + range(random, -30, 30), z: 1568, s: range(random, 0.9, 1.3) });
+  }
+  for (let x = 200; x < 2380; x += 260) {
+    palms.push({ x: x + range(random, -40, 40), z: 1732, s: range(random, 1.0, 1.5) });
   }
 
-  return { buildings, parks, lots, trees, parkedSpots, trafficLoops, pedRoutes };
+  // The river (east edge) blocks movement except on the bridge at z = 1100.
+  solids.push({ x0: RIVER_X, z0: 0, x1: CITY.width, z1: 1040 });
+  solids.push({ x0: RIVER_X, z0: 1160, x1: CITY.width, z1: CITY.height });
+  // The ocean blocks walking in past the waterline.
+  solids.push({ x0: 0, z0: WATER_Z, x1: RIVER_X, z1: CITY.height });
+
+  return { buildings, palms, solids };
 }
 
-/** Push a circle out of buildings, water and the world edge. Returns {x, y, hit}. */
-export function collideCircle(city, x, y, radius) {
-  let hit = false;
-  let nx = Math.max(radius, Math.min(WORLD.width - radius, x));
-  let ny = Math.max(radius, Math.min(WORLD.height - radius, y));
-  if (nx !== x || ny !== y) hit = true;
-  if (isWater(nx, ny)) {
-    // Slide back out of the water along the shortest axis.
-    if (ny > WATER_Y) ny = WATER_Y - radius;
-    else if (nx > RIVER_X) nx = RIVER_X - radius;
-    hit = true;
-  }
-  for (const b of city.buildings) {
-    const closestX = Math.max(b.x, Math.min(nx, b.x + b.w));
-    const closestY = Math.max(b.y, Math.min(ny, b.y + b.h));
-    const dx = nx - closestX;
-    const dy = ny - closestY;
-    const d2 = dx * dx + dy * dy;
-    if (d2 < radius * radius) {
-      hit = true;
-      if (d2 === 0) {
-        // Centre inside the building: push out along the smallest overlap.
-        const left = nx - b.x;
-        const right = b.x + b.w - nx;
-        const top = ny - b.y;
-        const bottom = b.y + b.h - ny;
-        const m = Math.min(left, right, top, bottom);
-        if (m === left) nx = b.x - radius;
-        else if (m === right) nx = b.x + b.w + radius;
-        else if (m === top) ny = b.y - radius;
-        else ny = b.y + b.h + radius;
-      } else {
-        const d = Math.sqrt(d2);
-        nx = closestX + (dx / d) * radius;
-        ny = closestY + (dy / d) * radius;
-      }
-    }
-  }
-  return { x: nx, y: ny, hit };
-}
-
-/** True when no building stands between (ax,ay) and (bx,by). */
-export function lineOfSight(city, ax, ay, bx, by) {
-  for (const b of city.buildings) {
-    if (segmentHitsRect(ax, ay, bx, by, b)) return false;
-  }
-  return true;
-}
-
-export function pointInAnyBuilding(city, x, y) {
-  for (const b of city.buildings) {
-    if (pointInRect(x, y, b)) return true;
+export function hitsSolid(solids, x, z, r) {
+  for (const s of solids) {
+    const nx = Math.max(s.x0, Math.min(x, s.x1));
+    const nz = Math.max(s.z0, Math.min(z, s.z1));
+    const dx = x - nx;
+    const dz = z - nz;
+    if (dx * dx + dz * dz < r * r) return true;
   }
   return false;
 }
 
-export { rectsOverlap };
+export function moveCircle(solids, x, z, dx, dz, r) {
+  let nx = x + dx;
+  let nz = z + dz;
+  if (!hitsSolid(solids, nx, z, r)) x = nx;
+  if (!hitsSolid(solids, x, nz, r)) z = nz;
+  x = Math.max(30, Math.min(CITY.width - 30, x));
+  z = Math.max(30, Math.min(CITY.height - 30, z));
+  return { x, z };
+}
+
+export function onRoad(x, z) {
+  for (const rx of ROADS_V) {
+    if (Math.abs(x - rx) <= ROAD_W / 2 && z <= BEACH_Z) return true;
+  }
+  for (const rz of ROADS_H) {
+    if (Math.abs(z - rz) <= ROAD_W / 2 && x <= RIVER_X) return true;
+  }
+  // The bridge carries the z = 1100 road across the river.
+  if (Math.abs(z - 1100) <= ROAD_W / 2 && x > RIVER_X) return true;
+  return false;
+}
+
+export function randomRoadPoint(random) {
+  if (random() < 0.5) {
+    const rx = pick(random, ROADS_V);
+    return { x: rx + range(random, -24, 24), z: range(random, 80, BEACH_Z - 40) };
+  }
+  const rz = pick(random, ROADS_H);
+  return { x: range(random, 80, RIVER_X - 40), z: rz + range(random, -24, 24) };
+}
+
+export function nearestRoadPoint(x, z) {
+  let best = null;
+  let bestD = Infinity;
+  for (const rx of ROADS_V) {
+    const d = Math.abs(x - rx);
+    if (d < bestD && z <= BEACH_Z) { bestD = d; best = { x: rx, z }; }
+  }
+  for (const rz of ROADS_H) {
+    const d = Math.abs(z - rz);
+    if (d < bestD && x <= RIVER_X) { bestD = d; best = { x, z: rz }; }
+  }
+  return best || { x, z };
+}
+
+export function nearestRoadLine(x, z) {
+  // Returns the road the point is closest to: {axis:'v'|'h', line, along}
+  let best = null;
+  let bestD = Infinity;
+  for (const rx of ROADS_V) {
+    const d = Math.abs(x - rx);
+    if (d < bestD) { bestD = d; best = { axis: 'v', line: rx, along: z }; }
+  }
+  for (const rz of ROADS_H) {
+    const d = Math.abs(z - rz);
+    if (d < bestD) { bestD = d; best = { axis: 'h', line: rz, along: x }; }
+  }
+  return best;
+}

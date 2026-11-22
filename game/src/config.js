@@ -1,121 +1,144 @@
-// Vice Shores — every tuning number and colour in one place.
-// The world is 2560x1920 of city: a street grid, beach and water on the
-// south edge, a river and a bridge on the east edge. The camera shows a
-// window-sized slice of it and follows the player.
+// Vice Shores (3D) — every tuning number, colour, mission, rank and crew line in one
+// place. The city is 2560x1920 world units on the XZ plane (x east, z south); the camera
+// shows a 1280x800 window of it in third person.
 
-export const WORLD = { width: 2560, height: 1920 };
+export const VIEW = { width: 1280, height: 800 };
+export const CITY = { width: 2560, height: 1920 };
+
+/** Fixed simulation step: 60 updates a second whatever the display's rate. */
 export const STEP = 1 / 60;
-export const VIEW_MINIMAP = { width: 208, height: 156 };
-
-/** Street centrelines (the grid the whole city is built on). */
-export const STREETS_X = [320, 800, 1280, 1760, 2240];
-export const STREETS_Y = [320, 800, 1280, 1600];
-export const ROAD_HALF = 52; // half the road width, kerb to kerb
-export const BEACH_Y = 1760; // south of here is sand, then water
-export const WATER_Y = 1864;
-export const RIVER_X = 2400; // east of here is river, crossed by one bridge
-export const BRIDGE_Y = 800; // the street that carries the bridge
 
 export const PLAYER = {
-  radius: 11,
-  walkSpeed: 185,
-  sprintSpeed: 295,
+  radius: 13,
+  walk: 260,
+  sprint: 400,
   health: 100,
   punchRange: 34,
+  shootCooldown: 0.24,
+  smgCooldown: 0.09,
+  bulletSpeed: 950,
+  bulletDamage: 34,
+  smgDamage: 16,
 };
 
 export const CAR = {
   length: 46,
-  width: 24,
-  radius: 19, // collision circle, centre of the car
-  accel: 330,
-  brake: 520,
-  reverseMax: 150,
-  maxSpeed: 430,
-  policeMaxSpeed: 400, // a touch slower than the player's car: a good driver can outrun them
-  turnRate: 2.7, // radians per second at full lock and full speed
-  drag: 0.55, // per-second speed loss factor
+  width: 22,
+  radius: 17,
+  accel: 430,
+  brake: 720,
+  reverseMax: 170,
+  maxSpeed: 520,
+  sportMaxSpeed: 640,
+  turn: 2.7,
+  drag: 0.55,
   health: 100,
-  ramDamage: 22,
 };
 
-export const TRAFFIC_COUNT = 10;
-export const PED_COUNT = 26;
-export const POLICE_MAX = 3;
+export const TRAFFIC = {
+  count: 24,
+  accel: 210,
+  maxSpeed: 240,
+};
+
+export const POLICE = {
+  accel: 490,
+  maxSpeed: 480,
+  maxActive: 4,
+  respawnDelay: 6,
+  ramDamage: 14,
+  bustRange: 52,
+  bustTime: 1.2,
+};
+
+export const HELI = {
+  followHeight: 170,
+  speed: 260,
+  spotlightRange: 320,
+};
+
+export const PEDS = { count: 22, walk: 62, run: 175 };
 
 export const WANTED = {
-  max: 3,
-  // Seconds a cop must be unable to see the player before stars start to fall.
-  unseenSeconds: 10,
-  decayEverySeconds: 6,
-  sightRange: 620,
+  maxStars: 5,
+  decayUnseen: 10,
+  decayStep: 4,
+  bustFine: 150,
 };
 
 export const MISSIONS = [
-  {
-    id: 1,
-    name: 'First Job',
-    giver: 'Marla',
-    text: 'Drive the blue coupe to the drop-off on Coral Row.',
-    payout: 250,
-    marker: { x: 2240, y: 320 },
-  },
-  {
-    id: 2,
-    name: 'Hot Package',
-    giver: 'Marla',
-    text: 'Grab the package in Palm Park, then deliver it to the pier. The cops will be watching.',
-    payout: 400,
-    pickup: { x: 1040, y: 1040 },
-    marker: { x: 2240, y: 1600 },
-  },
-  {
-    id: 3,
-    name: 'Heat',
-    giver: 'Marla',
-    text: 'Two stars and the whole force is coming. Lose them and get to the safehouse.',
-    payout: 600,
-    marker: { x: 320, y: 1600 },
-  },
+  { name: 'The Blue Coupe', payout: 250, stages: ['Get in the blue coupe', 'Drive the coupe to Coral Row'] },
+  { name: 'Park Pickup', payout: 400, stages: ['Grab the package in Palm Park', 'Deliver it to the pier — the cops are watching'] },
+  { name: 'Lose the Heat', payout: 600, stages: ['Lose the cops and reach the safehouse'] },
+  { name: 'The Getaway Driver', payout: 500, stages: ['Pick up the client at Hotel Coral', 'Drive to Airport Rd — 60 seconds'] },
+  { name: 'Turbo Boost', payout: 700, stages: ['Steal the red sports car from Lot B', 'Bring it to the garage'] },
+  { name: 'Payback', payout: 800, stages: ['Wreck 3 police cars — ram them'] },
+  { name: 'The Big Score', payout: 1200, stages: ['Reach the bank and crack the vault (hold E)', 'Escape to the safehouse — 3 stars'] },
+  { name: 'King of Vice Shores', payout: 1500, stages: ['Reach the pier with 5 stars — survive 60 seconds'] },
 ];
 
-export const SAFEHOUSE = { x: 320, y: 1600 };
-export const PLAYER_START = { x: 800, y: 1280 };
+export const RANKS = ['NOBODY', 'HUSTLER', 'WHEELMAN', 'FIXER', 'BOSS'];
+export function rankFor(missionsDone) {
+  if (missionsDone >= 7) return 'BOSS';
+  if (missionsDone >= 5) return 'FIXER';
+  if (missionsDone >= 3) return 'WHEELMAN';
+  if (missionsDone >= 1) return 'HUSTLER';
+  return 'NOBODY';
+}
+
+export const CREW = [
+  { name: 'Marla', role: 'Fixer', unlock: 1, ability: "Marla's Word — bribes cost half" },
+  { name: 'Dex', role: 'Wheelman', unlock: 3, ability: "Dex's Tune — your car is 15% faster" },
+  { name: 'Lena', role: 'Lookout', unlock: 5, ability: "Lena's Eyes — wanted cools off twice as fast" },
+];
+
+export const RADIO = [
+  { station: 'VICE FM 101.1', song: "'Neon Coast' — The Palms" },
+  { station: 'VICE FM 101.1', song: "'Sunset Drive' — Coral Reefers" },
+  { station: 'VICE FM 101.1', song: "'Golden Hour' — Marla & the Fixers" },
+  { station: 'VICE FM 101.1', song: "'Top Down' — The Boulevards" },
+];
+
+export const GARAGE = {
+  repair: 150,
+  respray: 200,
+  armour: 300,
+  ammo: 50,
+};
+
+export const SAVE_KEY = 'vice-shores.save.v1';
+export const SLOT_KEY = (n) => `vice-shores.save.slot${n}`;
 
 export const PALETTE = {
-  water: '#123a5c',
-  waterDeep: '#0d2a48',
-  sand: '#c9a86a',
-  sandDark: '#b3925a',
-  grass: '#2e5d3a',
-  grassDark: '#274f32',
-  asphalt: '#23232e',
-  asphaltLine: '#3d3d4d',
-  lane: '#d8c95a',
-  sidewalk: '#3b3b4a',
-  kerb: '#4a4a5c',
-  building: ['#4a3a6e', '#3a4a6e', '#6e3a5e', '#2f4a5e', '#5e3a3a', '#3a5e4a'],
-  buildingRoof: ['#5d4a86', '#4a5d86', '#864a72', '#3d5d72', '#724a4a', '#4a7260'],
+  sky: '#ff9a5c',
+  skyTop: '#7b4a8a',
+  fog: '#c97a8a',
+  ground: '#1a1e2c',
+  block: '#232839',
+  road: '#2b3040',
+  roadLine: '#e8c33a',
+  sidewalk: '#3a4157',
+  park: '#1d5c2e',
+  parkTree: '#2f8a44',
+  sand: '#e0b96a',
+  water: '#1a6a9a',
+  building: '#3a4260',
+  buildingRoof: '#2b3247',
   windowLit: '#ffd76a',
-  windowDark: '#1c1c2a',
+  text: '#eef1f5',
+  muted: '#9aa3b5',
+  gold: '#f2c94c',
   neonPink: '#ff4d8d',
   neonCyan: '#37e0d8',
-  neonYellow: '#ffd23e',
+  neonOrange: '#ff9a3d',
+  police: '#e8ecf4',
+  policeLightR: '#ff3b30',
+  policeLightB: '#2f7bff',
   player: '#37e0d8',
-  playerCar: '#2f7fe0',
-  police: '#1c2f6e',
-  policeLight: '#ff3b30',
-  traffic: ['#c94f4f', '#4fc94f', '#c9a94f', '#8f8f9f', '#c97a3f', '#7a5fc9'],
-  ped: ['#e0e0e0', '#f2a541', '#7ab8e0', '#e07a7a', '#a5e07a'],
-  hud: '#0e0c18',
-  hudText: '#f2f0ff',
-  hudMuted: '#9a94b8',
-  gold: '#ffd23e',
-  red: '#ff4d4d',
-  green: '#4dd06a',
+  playerCar: '#2f7bff',
+  health: '#4ade80',
+  danger: '#ff5a4d',
 };
 
 export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
-
-/** Where the save is kept between visits (this browser only). */
-export const SAVE_KEY = 'vice-shores.save';
+export const NEON_SIGNS = ['HOTEL CORAL', 'PIER 9', 'NEON BAR', 'TACOS', '24H MART', 'CINEMA', 'OFFICES', 'LAUNDRY', 'PIZZA', 'ARCADE', 'MOTEL', 'GYM', 'DINER', 'BANK'];
