@@ -1,71 +1,109 @@
-// input.js — Vice Shores: keyboard and mouse. Tracks held keys, drag-look
-// deltas for the third-person camera, and click-to-shoot. main.js reads the
-// snapshot each frame through VS.readInput().
-(function () {
-  var VS = window.VS;
-  VS.keys = {};
-  VS.mouse = { down: false, clicked: false, dx: 0, dy: 0, dragging: false, lastX: 0, lastY: 0 };
+// Keyboard and mouse input. The game reads movement every frame and takes
+// one-shot actions (confirm, pause, garage, crew, reload, weapon switch) once,
+// so a held key does not fire them twice.
 
-  VS.initInput = function () {
-    window.addEventListener('keydown', function (e) {
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) !== -1) e.preventDefault();
-      if (e.repeat) return;
-      VS.keys[e.code] = true;
-      if (e.code === 'KeyM') VS.audio.setMuted(!VS.state.muted);
-      if (e.code === 'KeyP' || e.code === 'Escape') VS.togglePause();
-      if (e.code === 'KeyG') VS.toggleGarage();
-      if (e.code === 'KeyE') VS.keys.interactEdge = true;
-      if (e.code === 'KeyR') VS.reloadWeapon();
-      if (e.code === 'Digit1') VS.switchWeapon(0);
-      if (e.code === 'Digit2') VS.switchWeapon(1);
-      if (e.code === 'Digit3') VS.switchWeapon(2);
-      if (e.code === 'Digit4') VS.switchWeapon(3);
-      if (e.code === 'KeyQ') VS.useCrew(0);
-      if (e.code === 'KeyC') VS.useCrew(1);
-      if (e.code === 'KeyV') VS.useCrew(2);
-    });
-    window.addEventListener('keyup', function (e) { VS.keys[e.code] = false; });
-    var gl = VS.el('gl');
-    gl.addEventListener('pointerdown', function (e) {
-      VS.mouse.down = true;
-      VS.mouse.clicked = true;
-      VS.mouse.dragging = true;
-      VS.mouse.lastX = e.clientX;
-      VS.mouse.lastY = e.clientY;
-    });
-    window.addEventListener('pointermove', function (e) {
-      if (!VS.mouse.dragging) return;
-      VS.mouse.dx += e.clientX - VS.mouse.lastX;
-      VS.mouse.dy += e.clientY - VS.mouse.lastY;
-      VS.mouse.lastX = e.clientX;
-      VS.mouse.lastY = e.clientY;
-    });
-    window.addEventListener('pointerup', function () {
-      VS.mouse.down = false;
-      VS.mouse.dragging = false;
-    });
-    gl.addEventListener('wheel', function (e) {
-      e.preventDefault();
-      VS.state.camDist = VS.clamp(VS.state.camDist + (e.deltaY > 0 ? 0.8 : -0.8), 4.5, 12);
-    }, { passive: false });
-    gl.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+export const ACTION_CONFIRM = 1;
+export const ACTION_PAUSE = 2;
+export const ACTION_GARAGE = 4;
+export const ACTION_MUTE = 8;
+export const ACTION_RELOAD = 16;
+export const ACTION_CREW_Q = 32;
+export const ACTION_CREW_C = 64;
+export const ACTION_CREW_V = 128;
+
+const EDGE_KEYS = {
+  Enter: ACTION_CONFIRM,
+  Space: ACTION_CONFIRM,
+  KeyP: ACTION_PAUSE,
+  Escape: ACTION_PAUSE,
+  KeyG: ACTION_GARAGE,
+  KeyM: ACTION_MUTE,
+  KeyR: ACTION_RELOAD,
+  KeyQ: ACTION_CREW_Q,
+  KeyC: ACTION_CREW_C,
+  KeyV: ACTION_CREW_V,
+};
+
+export function createInput(canvas) {
+  const held = new Set();
+  let queued = 0;
+  let pointerX = 0.5;
+  let pointerY = 0.5;
+  let pointerDown = false;
+  let pointerHeld = false;
+
+  function onKeyDown(event) {
+    if (event.code === 'Space' || event.code.startsWith('Arrow')) event.preventDefault();
+    if (!event.repeat && EDGE_KEYS[event.code]) queued |= EDGE_KEYS[event.code];
+    held.add(event.code);
+  }
+  function onKeyUp(event) {
+    held.delete(event.code);
+  }
+  function onPointerMove(event) {
+    const rect = canvas.getBoundingClientRect();
+    pointerX = (event.clientX - rect.left) / Math.max(1, rect.width);
+    pointerY = (event.clientY - rect.top) / Math.max(1, rect.height);
+  }
+  function onPointerDown(event) {
+    pointerDown = true;
+    pointerHeld = true;
+    onPointerMove(event);
+  }
+  function onPointerUp() {
+    pointerHeld = false;
+  }
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointerup', onPointerUp);
+
+  return {
+    /** Movement vector from WASD/arrows, normalised, in screen space (x right, y down). */
+    move() {
+      let x = 0;
+      let y = 0;
+      if (held.has('KeyA') || held.has('ArrowLeft')) x -= 1;
+      if (held.has('KeyD') || held.has('ArrowRight')) x += 1;
+      if (held.has('KeyW') || held.has('ArrowUp')) y -= 1;
+      if (held.has('KeyS') || held.has('ArrowDown')) y += 1;
+      const len = Math.hypot(x, y);
+      if (len > 0) {
+        x /= len;
+        y /= len;
+      }
+      return { x, y };
+    },
+    sprint() {
+      return held.has('ShiftLeft') || held.has('ShiftRight');
+    },
+    shootHeld() {
+      return pointerHeld || held.has('Space');
+    },
+    shootPressed() {
+      const pressed = pointerDown;
+      pointerDown = false;
+      return pressed;
+    },
+    weaponKey() {
+      for (let i = 1; i <= 4; i += 1) {
+        if (held.has(`Digit${i}`)) return i - 1;
+      }
+      return -1;
+    },
+    pointer() {
+      return { x: pointerX, y: pointerY };
+    },
+    /** One-shot actions since the last call; clears the queue. */
+    takeActions() {
+      const actions = queued;
+      queued = 0;
+      return actions;
+    },
+    isDown(code) {
+      return held.has(code);
+    },
   };
-
-  VS.readInput = function () {
-    var k = VS.keys;
-    return {
-      up: !!(k.KeyW || k.ArrowUp),
-      down: !!(k.KeyS || k.ArrowDown),
-      left: !!(k.KeyA || k.ArrowLeft),
-      right: !!(k.KeyD || k.ArrowRight),
-      sprint: !!(k.ShiftLeft || k.ShiftRight),
-      nitro: !!(k.ShiftLeft || k.ShiftRight),
-      handbrake: !!k.Space,
-      shoot: !!(k.Space || VS.mouse.down),
-      interact: !!k.KeyE,
-      interactEdge: !!k.interactEdge,
-    };
-  };
-
-  VS.consumeInteractEdge = function () { VS.keys.interactEdge = false; };
-})();
+}

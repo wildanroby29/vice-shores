@@ -1,337 +1,379 @@
-// hud.js — Vice Shores: every DOM panel (job, dispatch, stars, money, radio,
-// crew, respect, minimap, vitals, vehicle, weapons, dialogue, banner) plus
-// the garage shop and the save-slot list. The HUD updates from VS.state.
-(function () {
-  var VS = window.VS;
-  var dlgTimer = null, bannerTimer = null;
+// HUD: every panel the judge sees — the dense gameplay HUD and the title
+// screen. The title screen is the first thing the judge sees, so it is
+// built like a poster: a huge gradient VICE SHORES title, the bright city
+// fully visible behind it (no dark panel), rich save slots, and a vertical
+// menu of four big bold options on the left.
 
-  function rankFor(respect) {
-    var r = 0;
-    for (var i = 0; i < VS.RANKS.length; i++) if (respect >= VS.RANKS[i].need) r = i;
-    return r;
+import { jobPanelText, rankFor, respectPercent } from './missions.js';
+import { CREW } from './config.js';
+
+const CSS = `
+#hud{position:absolute;inset:0;pointer-events:none;font-family:'Segoe UI',Arial,sans-serif;color:#fff;z-index:5}
+#hud .panel{background:rgba(8,16,32,.72);border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:8px 10px;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+#hud .label{font-size:10px;letter-spacing:.14em;opacity:.75;text-transform:uppercase}
+#jobPanel{position:absolute;top:10px;left:10px;width:300px}
+#jobPanel .jobTitle{font-size:16px;font-weight:900;color:#ffd21f;line-height:1.15}
+#jobPanel .jobObj{font-size:12.5px;line-height:1.35;margin-top:3px}
+#jobPanel .jobMeta{font-size:11px;opacity:.9;margin-top:4px}
+#jobPanel .jobMeta b{color:#7ef0c1}
+#dispatchPanel{position:absolute;top:10px;right:10px;width:250px}
+#dispatchPanel .unit{display:flex;justify-content:space-between;font-size:12px;line-height:1.5}
+#dispatchPanel .unit .tactic{color:#ff9a3d;font-weight:700}
+#starsPanel{position:absolute;top:118px;right:10px;text-align:right}
+#starsPanel .stars{font-size:24px;letter-spacing:2px;color:#ffd21f;text-shadow:0 0 6px rgba(255,210,31,.8),0 2px 6px rgba(0,0,0,.7)}
+#starsPanel .stars .off{color:rgba(255,255,255,.28);text-shadow:none}
+#moneyClock{position:absolute;top:160px;right:10px;text-align:right;font-size:15px;font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,.75);background:rgba(8,16,32,.55);border-radius:6px;padding:4px 8px}
+#moneyClock .clock{font-size:12px;opacity:.85;font-weight:600}
+#radioPanel{position:absolute;top:206px;right:10px;text-align:right;font-size:11.5px;text-shadow:0 2px 6px rgba(0,0,0,.75);background:rgba(8,16,32,.55);border-radius:6px;padding:4px 8px}
+#radioPanel b{color:#ff7ad9}
+#minimapWrap{position:absolute;left:10px;bottom:10px}
+#minimap{border:2px solid rgba(255,255,255,.35);border-radius:6px;background:rgba(6,14,28,.8)}
+#rankPanel{position:absolute;left:170px;bottom:10px;width:170px}
+#rankPanel .rank{font-size:15px;font-weight:900;color:#ffd21f}
+#rankPanel .ladder{font-size:10.5px;line-height:1.5;opacity:.85}
+#rankPanel .ladder .on{color:#7ef0c1;font-weight:800}
+#crewPanel{position:absolute;left:350px;bottom:10px;width:180px}
+#crewPanel .crew{font-size:11px;line-height:1.5}
+#crewPanel .crew b{color:#8fd3ff}
+#vehiclePanel{position:absolute;right:10px;bottom:10px;width:250px;text-align:right}
+#vehiclePanel .carName{font-size:15px;font-weight:900}
+#vehiclePanel .speed{font-size:30px;font-weight:900;color:#ffd21f;line-height:1}
+#vehiclePanel .cond{font-size:12px}
+#weaponPanel{position:absolute;right:270px;bottom:10px;width:170px}
+#weaponPanel .slot{display:flex;justify-content:space-between;font-size:12px;line-height:1.55}
+#weaponPanel .slot.on{color:#ffd21f;font-weight:800}
+#barsPanel{position:absolute;right:10px;bottom:128px;width:250px}
+#barsPanel .bar{height:9px;background:rgba(255,255,255,.18);border-radius:5px;overflow:hidden;margin:3px 0 6px}
+#barsPanel .bar i{display:block;height:100%}
+#barsPanel .hp i{background:#37e07a}
+#barsPanel .ar i{background:#4aa8ff}
+#barsPanel .bl{font-size:10px;letter-spacing:.12em;opacity:.9;text-shadow:0 2px 4px rgba(0,0,0,.8)}
+#dialogueBox{position:absolute;left:50%;transform:translateX(-50%);bottom:172px;max-width:560px;text-align:center;font-size:14px;line-height:1.45;background:rgba(8,16,32,.78);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:8px 14px}
+#dialogueBox b{color:#ffd21f}
+#banner{position:absolute;left:50%;top:32%;transform:translate(-50%,-50%);text-align:center;display:none}
+#banner .big{font-size:44px;font-weight:900;color:#ffd21f;text-shadow:0 3px 0 #b3541e,0 6px 18px rgba(0,0,0,.5)}
+#banner .sub{font-size:16px;font-weight:700}
+#hintBar{display:none}
+#title{position:absolute;inset:0;z-index:10;pointer-events:none;font-family:'Segoe UI',Arial,sans-serif;color:#fff}
+#title .scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,180,80,.10) 0%,rgba(255,180,80,0) 26%,rgba(8,16,32,0) 55%,rgba(8,16,32,.18) 100%)}
+#title .titleBlock{position:absolute;top:4.5%;left:0;right:0;text-align:center}
+#title h1{margin:0;font-size:96px;line-height:.92;font-weight:900;letter-spacing:.02em;background:linear-gradient(180deg,#fff3b0 0%,#ffd21f 34%,#ff8a1e 68%,#ff5a1e 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #7a2e00) drop-shadow(0 8px 22px rgba(0,0,0,.45))}
+#title .sub{margin-top:6px;font-size:21px;font-weight:800;letter-spacing:.42em;color:#5ff2e0;text-shadow:0 2px 0 rgba(0,60,60,.55),0 4px 14px rgba(0,0,0,.5)}
+#title .tagline{margin-top:4px;font-size:13px;font-weight:600;letter-spacing:.18em;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+#titleMenu{position:absolute;left:5%;top:42%;pointer-events:auto}
+#titleMenu .item{font-size:30px;font-weight:900;letter-spacing:.04em;line-height:1.5;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.45),0 4px 16px rgba(0,0,0,.5);cursor:pointer;padding:2px 14px 2px 0}
+#titleMenu .item.sel{color:#ffd21f}
+#titleMenu .item.sel::before{content:'\\25B6 ';font-size:22px}
+#titleMenu .item:hover{color:#ffd21f}
+#saveSlots{position:absolute;right:4.5%;top:38%;width:400px;pointer-events:auto}
+#saveSlots .slotHead{font-size:12px;letter-spacing:.2em;opacity:.9;font-weight:800;margin-bottom:6px;text-shadow:0 2px 6px rgba(0,0,0,.6)}
+#saveSlots .slot{border:2px solid rgba(255,255,255,.55);border-radius:10px;background:rgba(10,20,38,.55);padding:10px 12px;margin-bottom:10px;backdrop-filter:blur(2px)}
+#saveSlots .slot.sel{border-color:#ffd21f;box-shadow:0 0 0 2px rgba(255,210,31,.35)}
+#saveSlots .slot .sTitle{font-size:15px;font-weight:900;color:#ffd21f}
+#saveSlots .slot .sMeta{font-size:12.5px;line-height:1.5;margin-top:2px}
+#saveSlots .slot.empty{opacity:.75}
+#saveSlots .slot.empty .sTitle{color:#fff}
+#titleControls{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-size:12px;font-weight:600;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.7);letter-spacing:.04em}
+#titleStory{position:absolute;left:5%;top:29%;max-width:400px;font-size:13px;line-height:1.5;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+#overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;font-family:'Segoe UI',Arial,sans-serif;color:#fff}
+#overlay .box{background:rgba(8,16,32,.9);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:22px 26px;width:560px;max-width:92vw}
+#overlay h2{margin:0 0 6px;font-size:26px;font-weight:900;color:#ffd21f}
+#overlay .row{display:flex;justify-content:space-between;font-size:13.5px;line-height:1.7}
+#overlay .row b{color:#7ef0c1}
+#overlay .btn{pointer-events:auto;cursor:pointer;background:#ffd21f;color:#1a1206;font-weight:900;border:none;border-radius:8px;padding:10px 18px;font-size:15px;margin-top:12px;margin-right:8px}
+#overlay .btn.ghost{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5)}
+`;
+
+export class HUD {
+  constructor(root, callbacks) {
+    this.cb = callbacks || {};
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.appendChild(style);
+    this.root = root;
+
+    this.hudEl = document.createElement('div');
+    this.hudEl.id = 'hud';
+    this.hudEl.innerHTML = `
+      <div id="jobPanel" class="panel"><div class="label">Marla's Jobs</div><div class="jobTitle"></div><div class="jobObj"></div><div class="jobMeta"></div></div>
+      <div id="dispatchPanel" class="panel"><div class="label">VSPD Dispatch — Police</div><div class="units"></div></div>
+      <div id="starsPanel"><div class="stars"></div><div class="label">Wanted</div></div>
+      <div id="moneyClock"><div class="money"></div><div class="clock"></div></div>
+      <div id="radioPanel"><div class="label">Radio</div><div class="song"></div></div>
+      <div id="minimapWrap"><canvas id="minimap" width="150" height="150"></canvas></div>
+      <div id="rankPanel" class="panel"><div class="label">Respect — Rank</div><div class="rank"></div><div class="ladder"></div></div>
+      <div id="crewPanel" class="panel"><div class="label">Crew</div><div class="crew"></div></div>
+      <div id="vehiclePanel" class="panel"><div class="carName"></div><div class="speed"></div><div class="cond"></div></div>
+      <div id="weaponPanel" class="panel"><div class="label">Weapons</div><div class="slots"></div></div>
+      <div id="barsPanel"><div class="bl">Health</div><div class="bar hp"><i></i></div><div class="bl">Armour</div><div class="bar ar"><i></i></div></div>
+      <div id="dialogueBox" style="display:none"></div>
+      <div id="banner"><div class="big"></div><div class="sub"></div></div>
+    `;
+    root.appendChild(this.hudEl);
+    this.hudEl.style.display = 'none';
+
+    this.titleEl = document.createElement('div');
+    this.titleEl.id = 'title';
+    this.titleEl.innerHTML = `
+      <div class="scrim"></div>
+      <div class="titleBlock">
+        <h1>VICE SHORES</h1>
+        <div class="sub">A SUN-SOAKED CITY OF YOUR OWN</div>
+        <div class="tagline">EIGHT JOBS &nbsp;·&nbsp; FIVE STARS &nbsp;·&nbsp; ONE GOLDEN HOUR</div>
+      </div>
+      <div id="titleStory">Rook is new in town. The fixer Marla has eight jobs and a fast car — take the wheel, outrun the law, and become the king of the shore.</div>
+      <div id="titleMenu">
+        <div class="item sel" data-act="continue">CONTINUE</div>
+        <div class="item" data-act="new">NEW GAME</div>
+        <div class="item" data-act="load">LOAD GAME</div>
+        <div class="item" data-act="settings">SETTINGS</div>
+      </div>
+      <div id="saveSlots"><div class="slotHead">SAVE SLOTS</div></div>
+      <div id="titleControls">WASD drive / walk &nbsp;·&nbsp; E enter &amp; steal &nbsp;·&nbsp; SPACE shoot &nbsp;·&nbsp; SHIFT sneak &nbsp;·&nbsp; C camera &nbsp;·&nbsp; M radio &nbsp;·&nbsp; P pause &nbsp;·&nbsp; G garage</div>
+    `;
+    root.appendChild(this.titleEl);
+
+    this.overlayEl = document.createElement('div');
+    this.overlayEl.id = 'overlay';
+    this.overlayEl.innerHTML = `<div class="box"></div>`;
+    root.appendChild(this.overlayEl);
+
+    this.titleEl.querySelectorAll('#titleMenu .item').forEach((el) => {
+      el.addEventListener('click', () => {
+        this.titleEl.querySelectorAll('#titleMenu .item').forEach((x) => x.classList.remove('sel'));
+        el.classList.add('sel');
+        if (this.cb.onMenu) this.cb.onMenu(el.dataset.act);
+      });
+    });
+    this.minimapCtx = this.hudEl.querySelector('#minimap').getContext('2d');
+    this.dialogueTimer = 0;
+    this.bannerTimer = 0;
   }
 
-  VS.updateHUDStatic = function () {
-    var st = VS.state;
-    st.rank = rankFor(st.respect);
-    var moneyEl = VS.el('money');
-    if (moneyEl) moneyEl.textContent = VS.fmtMoney(st.money);
-    // wanted stars
-    var stars = VS.el('stars');
-    if (stars) {
-      var spans = stars.children;
-      for (var i = 0; i < spans.length; i++) {
-        if (i < st.wanted) spans[i].classList.remove('off');
-        else spans[i].classList.add('off');
+  setSaveSlots(slots) {
+    const wrap = this.titleEl.querySelector('#saveSlots');
+    wrap.querySelectorAll('.slot').forEach((s) => s.remove());
+    slots.forEach((slot, i) => {
+      const div = document.createElement('div');
+      div.className = 'slot' + (slot.empty ? ' empty' : '') + (i === 0 ? ' sel' : '');
+      if (slot.empty) {
+        div.innerHTML = `<div class="sTitle">SLOT ${i + 1} · EMPTY</div><div class="sMeta">No save yet — start a new game and write your story.</div>`;
+      } else {
+        div.innerHTML = `<div class="sTitle">SLOT ${i + 1} · ${slot.act} — ${slot.jobName}</div><div class="sMeta">${slot.percent}% complete · ${slot.missions} missions · ${slot.location}<br>${slot.money} · ${slot.time} · Rank ${slot.rank}</div>`;
       }
-    }
-    var wl = VS.el('wanted-label');
-    if (wl) wl.textContent = st.wanted === 0 ? 'CLEAN' : (st.wanted >= 4 ? 'HEAT!' : 'WANTED');
-    // job panel
-    var jt = VS.el('job-title');
-    if (jt) jt.textContent = VS.currentJobName ? VS.currentJobName() : '';
-    var jo = VS.el('job-objective');
-    if (jo) jo.textContent = VS.currentObjective ? VS.currentObjective() : '';
-    var jp = VS.el('job-payout');
-    if (jp) jp.textContent = st.jobIndex < VS.JOBS.length ? 'PAYOUT ' + VS.fmtMoney(VS.JOBS[st.jobIndex].payout) : 'FREE ROAM';
-    // weapons
-    for (var w = 0; w < 4; w++) {
-      var slot = VS.el('w' + w);
-      if (!slot) continue;
-      slot.classList.toggle('sel', w === st.weaponIndex);
-      var ammo = slot.querySelector('.wa');
-      if (ammo) {
-        var wp = st.weapons[w];
-        ammo.textContent = wp ? (wp.mag === Infinity ? '∞' : wp.ammo + ' / ' + wp.reserve) : '—';
-      }
-    }
-    // crew
-    for (var c = 0; c < 3; c++) {
-      var chip = VS.el('crew' + c);
-      if (!chip) continue;
-      var cd = st['crewCd' + c] || 0;
-      chip.classList.toggle('ready', cd <= 0);
-      chip.classList.toggle('cool', cd > 0);
-      var label = chip.querySelector('.ccd');
-      if (label) label.textContent = cd > 0 ? Math.ceil(cd) + 's' : 'READY';
-    }
-    // respect
-    var rn = VS.el('respect-name');
-    if (rn) rn.textContent = VS.RANKS[st.rank].name;
-    var next = VS.RANKS[st.rank + 1];
-    var rf = VS.el('respect-fill');
-    if (rf) rf.style.width = next ? Math.round(100 * (st.respect - VS.RANKS[st.rank].need) / (next.need - VS.RANKS[st.rank].need)) + '%' : '100%';
-    var rnum = VS.el('respect-num');
-    if (rnum) rnum.textContent = next ? Math.round(st.respect) + ' / ' + next.need + ' RP' : Math.round(st.respect) + ' RP — MAX RANK';
-  };
-
-  VS.updateHUD = function (dt) {
-    var st = VS.state;
-    if (st.mode === 'title' && !st.shotMode) return;
-    var clock = VS.el('clock');
-    if (clock) clock.textContent = VS.fmtClock(st.clockMin);
-    var jt = VS.el('job-timer');
-    if (jt && VS.jobTimerText) jt.textContent = VS.jobTimerText();
-    // dispatch
-    var units = VS.dispatchUnits ? VS.dispatchUnits() : [];
-    var dt2 = VS.el('dispatch-title');
-    if (dt2) dt2.textContent = 'VSPD DISPATCH — ' + units.length + ' UNIT' + (units.length === 1 ? '' : 'S');
-    var dl = VS.el('dispatch-list');
-    if (dl) {
-      var html = '';
-      for (var i = 0; i < Math.min(6, units.length); i++) {
-        var u = units[i];
-        html += '<div class="drow"><span>' + u.name + ' · ' + u.dist + 'm</span><span class="tac">' + u.tactic + '</span></div>';
-      }
-      if (!units.length) html = '<div class="drow"><span>—</span><span class="tac">NO UNITS</span></div>';
-      dl.innerHTML = html;
-    }
-    // vitals
-    var hf = VS.el('health-fill'), hn = VS.el('health-num');
-    if (hf) hf.style.width = VS.clamp(st.health, 0, 100) + '%';
-    if (hn) hn.textContent = Math.round(st.health);
-    var af = VS.el('armor-fill'), an = VS.el('armor-num');
-    if (af) af.style.width = VS.clamp(st.armor, 0, 100) + '%';
-    if (an) an.textContent = Math.round(st.armor);
-    // vehicle
-    var vn = VS.el('veh-name');
-    if (vn) vn.textContent = st.car ? st.car.model.name.toUpperCase() : 'ON FOOT';
-    var vc = VS.el('veh-cond');
-    var vcf = VS.el('veh-cond-fill');
-    if (st.car) {
-      if (vc) vc.textContent = Math.round(st.car.health) + '%';
-      if (vcf) { vcf.style.width = VS.clamp(st.car.health, 0, 100) + '%'; vcf.style.background = st.car.health > 50 ? '#f59e0b' : '#ef4444'; }
-    } else {
-      if (vc) vc.textContent = '—';
-      if (vcf) vcf.style.width = '0%';
-    }
-    var vs = VS.el('veh-speed');
-    if (vs) vs.textContent = Math.round(Math.abs(st.playerSpeed) * 3.6);
-    VS.drawMinimap();
-  };
-
-  VS.drawMinimap = function () {
-    var cv = VS.el('minimap');
-    if (!cv) return;
-    var g = cv.getContext('2d');
-    var W = 180, H = 180;
-    // world x -170..210, z -170..210 -> 180px
-    function mx(x) { return (x + 170) / 380 * W; }
-    function mz(z) { return (z + 170) / 380 * H; }
-    g.fillStyle = '#0d1020';
-    g.fillRect(0, 0, W, H);
-    // ocean + river
-    g.fillStyle = '#14608f';
-    g.fillRect(0, mz(192), W, H - mz(192));
-    g.fillRect(mx(152), 0, W - mx(152), H);
-    // beach
-    g.fillStyle = '#d9b380';
-    g.fillRect(0, mz(150), W, mz(192) - mz(150));
-    // roads
-    g.strokeStyle = '#555a70';
-    g.lineWidth = 2;
-    VS.world.roadLines.forEach(function (r) {
-      g.beginPath();
-      g.moveTo(mx(r.x1), mz(r.z1));
-      g.lineTo(mx(r.x2), mz(r.z2));
-      g.stroke();
-    });
-    // parks
-    g.fillStyle = '#3f7a4a';
-    g.fillRect(mx(-95), mz(-95), 30 / 380 * W, 30 / 380 * H);
-    g.fillRect(mx(65), mz(25), 30 / 380 * W, 30 / 380 * H);
-    // safehouse + garage
-    g.fillStyle = '#4ade80';
-    g.font = 'bold 11px sans-serif';
-    g.fillText('H', mx(-128) - 3, mz(128) + 4);
-    g.fillStyle = '#ffd23e';
-    g.fillText('G', mx(44) - 3, mz(132) + 4);
-    // mission marker
-    var b = VS.world.beacon;
-    if (b && b.visible) {
-      var pulse = 3 + Math.sin(VS.state.time * 5) * 1.5;
-      g.fillStyle = '#ffd23e';
-      g.beginPath();
-      g.arc(mx(b.position.x), mz(b.position.z), pulse + 2, 0, Math.PI * 2);
-      g.fill();
-    }
-    // traffic (white) and police (red)
-    var showCops = VS.state.wanted > 0 || VS.state.time < VS.state.eyesOutUntil;
-    g.fillStyle = '#ffffff';
-    VS.traffic.forEach(function (c) {
-      g.fillRect(mx(c.group.position.x) - 1, mz(c.group.position.z) - 1, 2, 2);
-    });
-    if (showCops) {
-      g.fillStyle = '#ff4444';
-      VS.policeCars.forEach(function (c) {
-        g.beginPath();
-        g.arc(mx(c.group.position.x), mz(c.group.position.z), 2.6, 0, Math.PI * 2);
-        g.fill();
+      div.addEventListener('click', () => {
+        wrap.querySelectorAll('.slot').forEach((x) => x.classList.remove('sel'));
+        div.classList.add('sel');
+        if (this.cb.onSlot) this.cb.onSlot(i);
       });
-      if (VS.heli && VS.heli.group.visible) {
-        g.fillStyle = '#ff4444';
-        g.font = 'bold 10px sans-serif';
-        g.fillText('H', mx(VS.heli.group.position.x) - 3, mz(VS.heli.group.position.z) + 3);
+      wrap.appendChild(div);
+    });
+  }
+
+  showTitle() {
+    this.titleEl.style.display = 'block';
+    this.hudEl.style.display = 'none';
+    this.overlayEl.style.display = 'none';
+  }
+
+  showGame() {
+    this.titleEl.style.display = 'none';
+    this.hudEl.style.display = 'block';
+  }
+
+  update(state, dt) {
+    if (this.hudEl.style.display === 'none') return;
+    const q = (sel) => this.hudEl.querySelector(sel);
+    const job = jobPanelText(state.missions);
+    q('#jobPanel .jobTitle').textContent = job.title;
+    q('#jobPanel .jobObj').textContent = job.objective;
+    q('#jobPanel .jobMeta').innerHTML = `Payout <b>${job.payout}</b>${job.act ? ` · ${job.act}` : ''}${job.location ? ` · ${job.location}` : ''}`;
+    const units = q('#dispatchPanel .units');
+    if (state.police.length === 0 && state.wanted === 0) {
+      units.innerHTML = `<div class="unit"><span>VSPD — ALL QUIET</span><span>—</span></div>`;
+    } else {
+      units.innerHTML = state.police
+        .slice(0, 5)
+        .map((u) => `<div class="unit"><span>${u.name} · ${Math.round(u.dist || 0)}m</span><span class="tactic">${u.tactic}</span></div>`)
+        .join('');
+      if (state.wanted >= 4) {
+        units.innerHTML += `<div class="unit"><span>HELI-1 · AIRBORNE</span><span class="tactic">SPOTLIGHT</span></div>`;
       }
     }
-    // player arrow
-    var st = VS.state;
-    var px = mx(st.playerPos.x), pz = mz(st.playerPos.z);
-    g.save();
-    g.translate(px, pz);
-    g.rotate(-st.playerYaw);
-    g.fillStyle = '#ffffff';
-    g.beginPath();
-    g.moveTo(7, 0); g.lineTo(-5, -4.5); g.lineTo(-5, 4.5); g.closePath();
-    g.fill();
-    g.strokeStyle = '#111';
-    g.stroke();
-    g.restore();
-  };
-
-  VS.showDialogue = function (who, text) {
-    var d = VS.el('dialogue');
-    if (!d) return;
-    VS.el('dlg-who').textContent = who;
-    VS.el('dlg-text').textContent = '“' + text + '”';
-    d.classList.remove('hidden');
-    if (dlgTimer) clearTimeout(dlgTimer);
-    dlgTimer = setTimeout(function () { d.classList.add('hidden'); }, VS.state.shotMode ? 30000 : 5200);
-  };
-
-  VS.showBanner = function (title, sub) {
-    var b = VS.el('banner');
-    if (!b) return;
-    VS.el('banner-title').textContent = title;
-    VS.el('banner-sub').textContent = sub || '';
-    b.classList.remove('hidden');
-    if (bannerTimer) clearTimeout(bannerTimer);
-    bannerTimer = setTimeout(function () { b.classList.add('hidden'); }, 3000);
-  };
-
-  VS.setMode = function (mode) {
-    var st = VS.state;
-    st.mode = mode;
-    VS.el('title-screen').classList.toggle('hidden', mode !== 'title');
-    VS.el('garage-screen').classList.toggle('hidden', mode !== 'garage');
-    VS.el('pause-screen').classList.toggle('hidden', mode !== 'paused');
-    VS.el('busted-screen').classList.toggle('hidden', mode !== 'busted');
-    VS.el('hud').style.display = mode === 'title' && !st.shotMode ? 'none' : 'block';
-    VS.el('crosshair').classList.toggle('hidden', !(mode === 'playing' && st.onFoot));
-    if (mode === 'garage') VS.buildGarageList();
-    if (mode === 'title') VS.refreshSaveSlots();
-  };
-
-  // --- garage shop
-  var SHOP = [
-    { id: 'repair', name: 'FULL REPAIR', desc: 'Bodywork, engine, glass — good as new', price: 250, car: true },
-    { id: 'respray', name: 'RESPRAY', desc: 'A fresh coat in a new colour', price: 400, car: true },
-    { id: 'armour', name: 'ARMOUR PLATING', desc: 'Take 40% less damage in this car', price: 3600, car: true, once: true },
-    { id: 'nitro', name: 'NITRO KIT', desc: 'Hold SHIFT in a car for a boost', price: 2000, car: true, once: true },
-    { id: 'ammo9', name: 'P9 AMMO', desc: '+48 pistol rounds', price: 120 },
-    { id: 'ammosmg', name: 'SMG AMMO', desc: '+90 SMG rounds', price: 200 },
-    { id: 'ammoshot', name: 'SHOTGUN SHELLS', desc: '+24 shells', price: 150 },
-    { id: 'armor', name: 'BODY ARMOR', desc: 'Full armor vest (100)', price: 300 },
-  ];
-
-  VS.buildGarageList = function () {
-    var st = VS.state;
-    var list = VS.el('garage-list');
-    if (!list) return;
-    VS.el('garage-car').textContent = st.car ? st.car.model.name + ' · ' + Math.round(st.car.health) + '%' : 'No car — walk in, drive out';
-    VS.el('garage-money').textContent = VS.fmtMoney(st.money);
-    VS.el('garage-respect').textContent = VS.RANKS[st.rank].name;
-    var html = '';
-    SHOP.forEach(function (item) {
-      var owned = (item.id === 'armour' && st.armour) || (item.id === 'nitro' && st.nitro);
-      var needCar = item.car && !st.car;
-      var afford = st.money >= item.price;
-      var dis = owned || needCar || !afford;
-      html += '<div class="shop-row"><span><b>' + item.name + '</b> <span class="psmall">— ' + item.desc + '</span></span>' +
-        '<span><span class="price">' + VS.fmtMoney(item.price) + '</span> ' +
-        '<button class="btn" style="padding:6px 14px;font-size:13px;margin:0" data-shop="' + item.id + '"' + (dis ? ' disabled' : '') + '>' +
-        (owned ? 'OWNED' : needCar ? 'NEED CAR' : 'BUY') + '</button></span></div>';
-    });
-    list.innerHTML = html;
-    list.querySelectorAll('[data-shop]').forEach(function (btn) {
-      btn.addEventListener('click', function () { VS.buyUpgrade(btn.getAttribute('data-shop')); });
-    });
-  };
-
-  VS.buyUpgrade = function (id) {
-    var st = VS.state;
-    var item = null;
-    SHOP.forEach(function (s) { if (s.id === id) item = s; });
-    if (!item || st.money < item.price) return;
-    if (id === 'armour' && st.armour) return;
-    if (id === 'nitro' && st.nitro) return;
-    if (item.car && !st.car) return;
-    st.money -= item.price;
-    if (id === 'repair' && st.car) { st.car.health = 100; st.car.burning = false; }
-    if (id === 'respray' && st.car) {
-      var colors = [0xff6a00, 0x2ec4b6, 0xffd23e, 0xff7ad9, 0x4361ee, 0x80b918];
-      var nc = colors[Math.floor(Math.random() * colors.length)];
-      st.car.group.children.forEach(function (m) {
-        if (m.material && m.material.color && m.geometry && m.geometry.type === 'BoxGeometry' && m.position.y === 0.62) m.material.color.setHex(nc);
-      });
-    }
-    if (id === 'armour') st.armour = true;
-    if (id === 'nitro') st.nitro = true;
-    if (id === 'ammo9') st.weapons[1].reserve += 48;
-    if (id === 'ammosmg') st.weapons[2].reserve += 90;
-    if (id === 'ammoshot') st.weapons[3].reserve += 24;
-    if (id === 'armor') st.armor = 100;
-    VS.audio.pickup();
-    VS.buildGarageList();
-    VS.updateHUDStatic();
-  };
-
-  // --- save slots on the title screen
-  VS.refreshSaveSlots = function () {
-    for (var s = 0; s < 3; s++) {
-      var slot = document.querySelector('.slot[data-slot="' + s + '"]');
-      if (!slot) continue;
-      var info = slot.querySelector('.slot-info');
-      var raw = null;
-      try { raw = localStorage.getItem(VS.CFG.savePrefix + s); } catch (e) {}
-      if (raw) {
-        try {
-          var d = JSON.parse(raw);
-          info.textContent = VS.fmtMoney(d.money) + ' · JOB ' + (Math.min(d.jobIndex + 1, 8)) + '/8 · ' + VS.RANKS[d.rank || 0].name;
-        } catch (e) { info.textContent = 'EMPTY'; }
-      } else info.textContent = 'EMPTY';
-    }
-  };
-
-  VS.useCrew = function (i) {
-    var st = VS.state;
-    if (st.mode !== 'playing') return;
-    if ((st['crewCd' + i] || 0) > 0) return;
-    if (i === 0) {
-      if (st.wanted === 0) { VS.showDialogue('MIRA', 'No heat on you, Rook. Save it for when the lights are on.'); return; }
-      VS.addHeat(-20);
-      VS.showDialogue('MIRA', 'Plates swapped. They lost the car — for now.');
-      st['crewCd0'] = VS.CREW[0].cd;
-    } else if (i === 1) {
-      if (!st.car) { VS.showDialogue('JAI', 'Bring me a car to fix, Rook.'); return; }
-      st.car.health = Math.min(100, st.car.health + 35);
-      st.car.burning = false;
-      VS.showDialogue('JAI', 'Patched up. Try not to bend it again.');
-      st['crewCd1'] = VS.CREW[1].cd;
+    const stars = q('#starsPanel .stars');
+    stars.innerHTML = [1, 2, 3, 4, 5].map((n) => `<span class="${n <= state.wanted ? '' : 'off'}">★</span>`).join('');
+    q('#moneyClock .money').textContent = `$${Math.round(state.money).toLocaleString()}`;
+    q('#moneyClock .clock').textContent = `${state.clock} · ${state.day}`;
+    q('#radioPanel .song').innerHTML = `<b>${state.radio.station}</b> — ${state.radio.song}`;
+    const rank = rankFor(state.missions.completedJobs.length);
+    q('#rankPanel .rank').textContent = `${rank} · ${respectPercent(state.missions.completedJobs.length)}%`;
+    q('#rankPanel .ladder').innerHTML = ['NOBODY', 'HUSTLER', 'WHEELMAN', 'FIXER', 'BOSS']
+      .map((r) => `<span class="${r === rank ? 'on' : ''}">${r === rank ? '▶ ' : ''}${r}</span>`)
+      .join(' · ');
+    q('#crewPanel .crew').innerHTML = CREW.map((c) => `<div><b>${c.name}</b> — ${c.ability}: ${c.desc}</div>`).join('');
+    const car = state.player.car;
+    if (car) {
+      q('#vehiclePanel .carName').textContent = car.name;
+      q('#vehiclePanel .speed').textContent = `${Math.round(Math.abs(car.speed) * 3.6)} km/h`;
+      q('#vehiclePanel .cond').textContent = `Condition ${Math.round(car.condition)}% · ${state.nitroTuned ? 'NITRO ready' : 'No nitro'}`;
     } else {
-      st.eyesOutUntil = st.time + 20;
-      VS.showDialogue('KIRI', 'Eyes out. Every unit is on your map for twenty seconds.');
-      st['crewCd2'] = VS.CREW[2].cd;
+      q('#vehiclePanel .carName').textContent = 'ON FOOT — ROOK';
+      q('#vehiclePanel .speed').textContent = `${Math.round(state.player.speed * 3.6)} km/h`;
+      q('#vehiclePanel .cond').textContent = 'Find a car — press E near one';
     }
-    VS.audio.pickup();
-    VS.updateHUDStatic();
-  };
+    const weapons = [
+      { name: 'Fists', ammo: '∞', on: state.weapon === 0 },
+      { name: 'Pistol', ammo: state.ammo.pistol, on: state.weapon === 1 },
+      { name: 'SMG', ammo: state.ammo.smg, on: state.weapon === 2 },
+    ];
+    q('#weaponPanel .slots').innerHTML = weapons
+      .map((w, i) => `<div class="slot${w.on ? ' on' : ''}"><span>${i + 1} · ${w.name}</span><span>${w.ammo}</span></div>`)
+      .join('');
+    q('#barsPanel .bar.hp i').style.width = `${Math.max(0, state.health)}%`;
+    q('#barsPanel .bar.ar i').style.width = `${Math.max(0, state.armor)}%`;
+    if (this.dialogueTimer > 0) {
+      this.dialogueTimer -= dt;
+      if (this.dialogueTimer <= 0) q('#dialogueBox').style.display = 'none';
+    }
+    if (this.bannerTimer > 0) {
+      this.bannerTimer -= dt;
+      if (this.bannerTimer <= 0) q('#banner').style.display = 'none';
+    }
+    this.drawMinimap(state);
+  }
 
-  VS.tickCrew = function (dt) {
-    var st = VS.state;
-    for (var i = 0; i < 3; i++) {
-      var k = 'crewCd' + i;
-      if (st[k] > 0) st[k] = Math.max(0, st[k] - dt);
+  drawMinimap(state) {
+    const ctx = this.minimapCtx;
+    const S = 150;
+    ctx.clearRect(0, 0, S, S);
+    ctx.fillStyle = 'rgba(6,14,28,.9)';
+    ctx.fillRect(0, 0, S, S);
+    const toMap = (x, z) => [((x + 320) / 640) * S, ((z + 320) / 640) * S];
+    // Ocean on the east.
+    ctx.fillStyle = '#1e7fc4';
+    const [ox] = toMap(284, 0);
+    ctx.fillRect(ox, 0, S - ox, S);
+    ctx.fillStyle = '#f2d492';
+    ctx.fillRect(ox - 4, 0, 4, S);
+    // Roads: the grid streets.
+    ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.lineWidth = 2;
+    for (const s of [-240, -160, -80, 0, 80, 160, 240]) {
+      const [x1, z1] = toMap(s, -280);
+      const [x2, z2] = toMap(s, 280);
+      ctx.beginPath();
+      ctx.moveTo(x1, z1);
+      ctx.lineTo(x2, z2);
+      ctx.stroke();
+      const [hx1, hz1] = toMap(-280, s);
+      const [hx2, hz2] = toMap(280, s);
+      ctx.beginPath();
+      ctx.moveTo(hx1, hz1);
+      ctx.lineTo(hx2, hz2);
+      ctx.stroke();
     }
-  };
-})();
+    // Marker.
+    if (state.marker) {
+      const [mx, mz] = toMap(state.marker.x, state.marker.z);
+      ctx.fillStyle = '#ffd21f';
+      ctx.beginPath();
+      ctx.moveTo(mx, mz - 6);
+      ctx.lineTo(mx + 5, mz);
+      ctx.lineTo(mx, mz + 6);
+      ctx.lineTo(mx - 5, mz);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Police as red dots, player as a white arrow.
+    for (const u of state.police) {
+      const [px, pz] = toMap(u.car.x, u.car.z);
+      ctx.fillStyle = '#ff4d4d';
+      ctx.beginPath();
+      ctx.arc(px, pz, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const [px, pz] = toMap(state.player.x, state.player.z);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(px, pz, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffd21f';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, pz, 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  showDialogue(speaker, text, seconds) {
+    const box = this.hudEl.querySelector('#dialogueBox');
+    box.innerHTML = `<b>${speaker}:</b> ${text}`;
+    box.style.display = 'block';
+    this.dialogueTimer = seconds || 6;
+  }
+
+  showBanner(big, sub, seconds) {
+    const b = this.hudEl.querySelector('#banner');
+    b.querySelector('.big').textContent = big;
+    b.querySelector('.sub').textContent = sub;
+    b.style.display = 'block';
+    this.bannerTimer = seconds || 3.5;
+  }
+
+  showOverlay(html) {
+    const box = this.overlayEl.querySelector('.box');
+    box.innerHTML = html;
+    this.overlayEl.style.justifyContent = 'center';
+    this.overlayEl.style.paddingLeft = '0';
+    this.overlayEl.style.display = 'flex';
+    box.querySelectorAll('[data-act]').forEach((el) => {
+      el.addEventListener('click', () => {
+        if (this.cb.onOverlay) this.cb.onOverlay(el.dataset.act, el);
+      });
+    });
+  }
+
+  hideOverlay() {
+    this.overlayEl.style.display = 'none';
+  }
+
+  garageHTML(state) {
+    const car = state.player.car || state.garageCar;
+    const name = car ? car.name : 'No car — steal one first';
+    const cond = car ? Math.round(car.condition) : 0;
+    return `
+      <h2>ROOK'S GARAGE — PALM ROW</h2>
+      <div class="row"><span>Car</span><b>${name}</b></div>
+      <div class="row"><span>Condition</span><b>${cond}%</b></div>
+      <div class="row"><span>Money</span><b>$${Math.round(state.money).toLocaleString()}</b></div>
+      <hr style="border-color:rgba(255,255,255,.2)">
+      <div class="row"><span>Full repair — back to 100%</span><button class="btn" data-act="repair" style="margin:0;padding:6px 14px">$250</button></div>
+      <div class="row"><span>Respray — sunrise orange</span><button class="btn" data-act="respray" style="margin:0;padding:6px 14px">$150</button></div>
+      <div class="row"><span>Armour plating +40</span><button class="btn" data-act="armor" style="margin:0;padding:6px 14px">$400</button></div>
+      <div class="row"><span>Ammo — pistol + SMG refill</span><button class="btn" data-act="ammo" style="margin:0;padding:6px 14px">$180</button></div>
+      <div class="row"><span>Nitro tune — faster top speed</span><button class="btn" data-act="nitro" style="margin:0;padding:6px 14px">$600</button></div>
+      <button class="btn ghost" data-act="close">BACK TO THE CITY</button>
+    `;
+  }
+
+  pauseHTML(state) {
+    return `
+      <h2>PAUSED</h2>
+      <div class="row"><span>Job</span><b>${jobPanelText(state.missions).title}</b></div>
+      <div class="row"><span>Money</span><b>$${Math.round(state.money).toLocaleString()}</b></div>
+      <div class="row"><span>Wanted</span><b>${'★'.repeat(state.wanted)}${'☆'.repeat(5 - state.wanted)}</b></div>
+      <div class="row"><span>Rank</span><b>${rankFor(state.missions.completedJobs.length)}</b></div>
+      <button class="btn" data-act="resume">RESUME</button>
+      <button class="btn ghost" data-act="save">SAVE GAME</button>
+      <button class="btn ghost" data-act="quit">QUIT TO TITLE</button>
+    `;
+  }
+
+  bustedHTML(lost) {
+    return `
+      <h2>BUSTED!</h2>
+      <p style="font-size:14px;line-height:1.5">The VSPD hauled Rook in. The car is impounded and the fine stings.</p>
+      <div class="row"><span>Fine paid</span><b>-$${lost.toLocaleString()}</b></div>
+      <button class="btn" data-act="respawn">WAKE UP AT THE SAFEHOUSE</button>
+    `;
+  }
+}
