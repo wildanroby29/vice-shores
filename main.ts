@@ -13,7 +13,8 @@
 // a title screen with three save slots, a garage/upgrade shop, a localStorage save, and
 // synthesized WebAudio sound.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
+// Serve it locally with `node serve.ts`, then open http://localhost:8080
+// (screenshot scenes: ?shot=<name>&seed=7, e.g. ?shot=1-chase&seed=7).
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
