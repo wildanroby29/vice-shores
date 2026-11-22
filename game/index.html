@@ -1,16 +1,223 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Vice Shores — an open-world crime story</title>
-    <style>
-      html, body { margin: 0; padding: 0; overflow: hidden; background: #1a1e2c; }
-      canvas { display: block; }
-    </style>
-  </head>
-  <body>
-    <script src="./vendor/three.min.js"></script>
-    <script type="module" src="./src/main.js"></script>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vice Shores — open-world crime</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0b18;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #fff; }
+  #gl { position: fixed; inset: 0; }
+  #gl canvas { display: block; }
+  .panel { position: absolute; background: rgba(8, 10, 26, 0.74);
+    border: 1px solid rgba(255, 255, 255, 0.20); border-radius: 8px;
+    padding: 8px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.45); }
+  .ptitle { font-size: 11px; letter-spacing: 2px; color: #ff7ad9; font-weight: 700; }
+  .pbig { font-size: 15px; font-weight: 700; }
+  .psmall { font-size: 12px; color: #cfd4ff; line-height: 1.35; }
+  /* job panel, top-left */
+  #job-panel { top: 12px; left: 12px; width: 302px; }
+  #job-objective { margin-top: 3px; }
+  #job-meta { margin-top: 4px; color: #ffd23e; font-size: 12px; font-weight: 700; }
+  /* dispatch panel, top-right */
+  #dispatch-panel { top: 12px; right: 12px; width: 284px; }
+  #dispatch-list { margin-top: 4px; font-size: 12px; line-height: 1.5; }
+  .drow { display: flex; justify-content: space-between; }
+  .drow .tac { color: #ff9d5c; font-weight: 700; }
+  /* wanted stars + money, top-center */
+  #stars-wrap { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #stars { font-size: 26px; letter-spacing: 5px; color: #ffd23e; text-shadow: 0 0 8px rgba(255,210,62,.8); line-height: 1; }
+  #stars .off { color: rgba(255,255,255,0.28); text-shadow: none; }
+  #money-clock { margin-top: 2px; font-size: 15px; font-weight: 700; }
+  #money-clock span { margin: 0 8px; }
+  #hint { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.75);
+    background: rgba(8,10,26,.55); padding: 3px 8px; border-radius: 6px; }
+  /* radio, under job panel */
+  #radio { top: 148px; left: 12px; width: 302px; font-size: 12px; }
+  #radio-song { color: #7df9d6; font-weight: 700; }
+  /* crew abilities, right under dispatch */
+  #crew { top: 148px; right: 12px; width: 284px; font-size: 12px; }
+  .crew-chip { display: flex; justify-content: space-between; padding: 2px 0; }
+  .crew-chip .key { color: #7df9d6; font-weight: 700; }
+  .crew-chip.ready .cname { color: #fff; }
+  .crew-chip.cool .cname { color: rgba(255,255,255,.45); }
+  /* minimap + respect, bottom-left */
+  #respect-wrap { left: 12px; bottom: 206px; width: 204px; }
+  #respect-bar { height: 8px; background: rgba(255,255,255,.18); border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  #respect-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ff7ad9, #ffd23e); }
+  #minimap-wrap { left: 12px; bottom: 12px; padding: 6px; }
+  #minimap { display: block; width: 180px; height: 180px; border-radius: 4px; }
+  /* vitals + vehicle, bottom-right */
+  #vitals { right: 12px; bottom: 168px; width: 264px; }
+  .bar { height: 9px; background: rgba(255,255,255,.16); border-radius: 4px; overflow: hidden; margin: 3px 0 5px; }
+  #health-fill { height: 100%; width: 100%; background: #4ade80; }
+  #armor-fill { height: 100%; width: 0%; background: #60a5fa; }
+  #veh-panel { right: 12px; bottom: 12px; width: 264px; }
+  #veh-speed { font-size: 30px; font-weight: 800; line-height: 1; }
+  #veh-speed small { font-size: 12px; color: #cfd4ff; font-weight: 600; }
+  #weapons { position: absolute; right: 288px; bottom: 12px; display: flex; gap: 6px; }
+  .wslot { width: 74px; padding: 6px 7px; border-radius: 8px; background: rgba(8,10,26,.74);
+    border: 1px solid rgba(255,255,255,.20); font-size: 11px; text-align: center; }
+  .wslot.sel { border-color: #ffd23e; box-shadow: 0 0 10px rgba(255,210,62,.45); }
+  .wslot .wn { font-weight: 700; }
+  .wslot .wa { color: #7df9d6; }
+  /* dialogue + banner */
+  #dialogue { left: 50%; transform: translateX(-50%); bottom: 110px; width: 540px; text-align: center;
+    font-size: 14px; padding: 8px 14px; }
+  #dialogue .who { color: #ff7ad9; font-weight: 700; }
+  #banner { left: 50%; top: 24%; transform: translateX(-50%); text-align: center; border: none;
+    background: none; box-shadow: none; text-shadow: 0 2px 14px rgba(0,0,0,.8); }
+  #banner-title { font-size: 44px; font-weight: 800; letter-spacing: 3px; color: #ffd23e; }
+  #banner-sub { font-size: 16px; color: #fff; margin-top: 4px; }
+  #crosshair { left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.9); box-shadow: 0 0 6px rgba(0,0,0,.8); }
+  /* full-screen overlays */
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(10,8,28,.55), rgba(10,8,28,.82)); z-index: 20; }
+  .card { width: 640px; max-width: 92vw; background: rgba(10, 12, 30, 0.92); border: 1px solid rgba(255,122,217,.45);
+    border-radius: 14px; padding: 26px 30px; box-shadow: 0 10px 50px rgba(0,0,0,.6); }
+  .card h1 { margin: 0 0 2px; font-size: 46px; letter-spacing: 4px; color: #ffd23e;
+    text-shadow: 0 0 18px rgba(255,210,62,.5); }
+  .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: 3px; color: #ff7ad9; }
+  .card p { font-size: 14px; line-height: 1.5; color: #e6e9ff; }
+  .ctrls { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 18px; font-size: 13px; margin: 12px 0; }
+  .ctrls b { color: #7df9d6; }
+  .slots { display: flex; gap: 10px; margin: 12px 0; }
+  .slot { flex: 1; border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: 10px; font-size: 12px;
+    cursor: pointer; background: rgba(255,255,255,.05); }
+  .slot:hover, .slot.sel { border-color: #ffd23e; background: rgba(255,210,62,.12); }
+  .btn { display: inline-block; background: #ffd23e; color: #1a1030; border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 800; padding: 10px 22px; margin: 4px 6px 0 0; cursor: pointer; }
+  .btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); }
+  .btn:hover { filter: brightness(1.1); }
+  .shop-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px;
+    border-bottom: 1px solid rgba(255,255,255,.12); font-size: 14px; }
+  .shop-row .price { color: #ffd23e; font-weight: 700; }
+  .hidden { display: none !important; }
+  #err { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: #111; color: #fff; font-size: 16px; z-index: 99; text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+<div id="gl"></div>
+
+<div id="hud">
+  <div id="job-panel" class="panel">
+    <div class="ptitle" id="job-kicker">VICE SHORES</div>
+    <div class="pbig" id="job-title">JOB 1/8 — FIRST WHEELS</div>
+    <div class="psmall" id="job-objective">Steal any car and drive it to the Coral Row marker.</div>
+    <div id="job-meta"><span id="job-payout">PAYOUT $250</span> &nbsp; <span id="job-timer"></span></div>
+  </div>
+  <div id="dispatch-panel" class="panel">
+    <div class="ptitle" id="dispatch-title">VSPD DISPATCH — 0 UNITS</div>
+    <div id="dispatch-list"><div class="drow"><span>—</span><span class="tac">NO UNITS</span></div></div>
+  </div>
+  <div id="stars-wrap" class="panel" style="background:rgba(8,10,26,.55)">
+    <div id="stars"><span>★</span><span class="off">★</span><span class="off">★</span><span class="off">★</span><span class="off">★</span></div>
+    <div id="money-clock"><span id="money">$1,250</span><span id="clock">17:41</span><span id="wanted-label">CLEAN</span></div>
+  </div>
+  <div id="hint">WASD move &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; E enter / exit car &nbsp;·&nbsp; CLICK shoot &nbsp;·&nbsp; 1–4 weapons &nbsp;·&nbsp; G garage &nbsp;·&nbsp; P pause</div>
+  <div id="radio" class="panel"><span class="ptitle">RADIO</span> &nbsp; <span id="radio-station">SHORE FM 98.6</span><br><span id="radio-song">♪ Neon Tide — Palm Static</span></div>
+  <div id="crew" class="panel">
+    <div class="ptitle">CREW</div>
+    <div class="crew-chip ready" id="crew0"><span><span class="key">Q</span> <span class="cname">MIRA — SWAP PLATES</span></span><span class="ccd">READY</span></div>
+    <div class="crew-chip ready" id="crew1"><span><span class="key">C</span> <span class="cname">JAI — QUICK FIX</span></span><span class="ccd">READY</span></div>
+    <div class="crew-chip ready" id="crew2"><span><span class="key">V</span> <span class="cname">KIRI — EYES OUT</span></span><span class="ccd">READY</span></div>
+  </div>
+  <div id="respect-wrap" class="panel">
+    <div class="ptitle">RESPECT — <span id="respect-name">NOBODY</span></div>
+    <div id="respect-bar"><div id="respect-fill"></div></div>
+    <div class="psmall" id="respect-num">0 / 400 RP</div>
+  </div>
+  <div id="minimap-wrap" class="panel"><canvas id="minimap" width="180" height="180"></canvas></div>
+  <div id="vitals" class="panel">
+    <div class="psmall">HEALTH <span id="health-num">100</span></div>
+    <div class="bar"><div id="health-fill"></div></div>
+    <div class="psmall">ARMOR <span id="armor-num">0</span></div>
+    <div class="bar"><div id="armor-fill"></div></div>
+  </div>
+  <div id="veh-panel" class="panel">
+    <div class="ptitle" id="veh-name">ON FOOT</div>
+    <div class="psmall">CONDITION <span id="veh-cond">—</span></div>
+    <div class="bar"><div id="veh-cond-fill" style="height:100%;width:100%;background:#f59e0b"></div></div>
+    <div><span id="veh-speed">0</span> <small>km/h</small></div>
+  </div>
+  <div id="weapons">
+    <div class="wslot" id="w0"><div class="wn">FISTS</div><div class="wa">∞</div></div>
+    <div class="wslot sel" id="w1"><div class="wn">P9 PISTOL</div><div class="wa">12 / 48</div></div>
+    <div class="wslot" id="w2"><div class="wn">SMG</div><div class="wa">30 / 90</div></div>
+    <div class="wslot" id="w3"><div class="wn">SHOTGUN</div><div class="wa">6 / 24</div></div>
+  </div>
+  <div id="dialogue" class="panel hidden"><span class="who" id="dlg-who">MARLA</span> <span id="dlg-text"></span></div>
+  <div id="banner" class="panel hidden"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="crosshair" class="panel hidden"></div>
+</div>
+
+<div id="title-screen" class="overlay">
+  <div class="card">
+    <h1>VICE SHORES</h1>
+    <h2>OPEN-WORLD CRIME · A SUN-SOAKED CITY OF YOUR OWN</h2>
+    <p>You are <b>Rook</b>, a new driver in Vice Shores. The fixer <b>Marla</b> has eight jobs for you —
+    steal cars, run packages, outrun the Vice Shores Police Department and pull the big score at Shore Bank.
+    Every job pays. Every crime is watched. Make a name, climb from NOBODY to BOSS.</p>
+    <div class="ctrls">
+      <div><b>W A S D</b> — move / drive</div><div><b>MOUSE DRAG</b> — look around</div>
+      <div><b>SHIFT</b> — sprint / nitro</div><div><b>CLICK / SPACE</b> — shoot / handbrake</div>
+      <div><b>E</b> — enter / exit / steal car</div><div><b>1–4</b> — switch weapon</div>
+      <div><b>R</b> — reload</div><div><b>Q / C / V</b> — crew abilities</div>
+      <div><b>G</b> — garage (at Dockside Customs)</div><div><b>P</b> — pause &nbsp; <b>M</b> — mute</div>
+    </div>
+    <div class="ptitle">SAVE SLOTS</div>
+    <div class="slots" id="save-slots">
+      <div class="slot sel" data-slot="0"><b>SLOT 1</b><br><span class="slot-info">EMPTY</span></div>
+      <div class="slot" data-slot="1"><b>SLOT 2</b><br><span class="slot-info">EMPTY</span></div>
+      <div class="slot" data-slot="2"><b>SLOT 3</b><br><span class="slot-info">EMPTY</span></div>
+    </div>
+    <button class="btn" id="btn-continue">CONTINUE</button>
+    <button class="btn ghost" id="btn-new">NEW GAME</button>
+  </div>
+</div>
+
+<div id="garage-screen" class="overlay hidden">
+  <div class="card">
+    <h1 style="font-size:32px">DOCKSIDE CUSTOMS</h1>
+    <h2>GARAGE · REPAIR · UPGRADES · AMMO</h2>
+    <p class="psmall">Your ride: <b id="garage-car">—</b> · Your cash: <b id="garage-money">$0</b> · Respect: <b id="garage-respect">NOBODY</b></p>
+    <div id="garage-list"></div>
+    <button class="btn" id="garage-close">BACK TO THE STREETS [G]</button>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay hidden">
+  <div class="card" style="width:420px">
+    <h1 style="font-size:32px">PAUSED</h1>
+    <p>Vice Shores waits for no one. Well — except now.</p>
+    <button class="btn" id="btn-resume">RESUME [P]</button>
+    <button class="btn ghost" id="btn-quit-title">SAVE &amp; TITLE</button>
+  </div>
+</div>
+
+<div id="busted-screen" class="overlay hidden">
+  <div class="card" style="width:420px;text-align:center">
+    <h1 style="font-size:40px;color:#ff5c5c">BUSTED</h1>
+    <p id="busted-text">The VSPD caught up with you. Fine paid: $150. Marla is not impressed.</p>
+    <button class="btn" id="btn-busted">BACK ON THE STREETS</button>
+  </div>
+</div>
+
+<div id="err"><div>VICE SHORES needs WebGL.<br>Please open it in desktop Chrome.</div></div>
+
+<script src="./vendor/three.min.js"></script>
+<script src="./src/config.js"></script>
+<script src="./src/audio.js"></script>
+<script src="./src/city.js"></script>
+<script src="./src/vehicles.js"></script>
+<script src="./src/people.js"></script>
+<script src="./src/police.js"></script>
+<script src="./src/missions.js"></script>
+<script src="./src/hud.js"></script>
+<script src="./src/input.js"></script>
+<script src="./src/shots.js"></script>
+<script src="./src/main.js"></script>
+</body>
 </html>

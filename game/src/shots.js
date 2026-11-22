@@ -1,148 +1,154 @@
-// Vice Shores (3D) — the four staged screenshot scenes, exactly the winners' fixed set:
-// (1) a 5-star police chase at speed with a helicopter spotlight, ramming police and fire;
-// (2) on-foot combat / carjacking with pedestrians; (3) the title/menu with save slots;
-// (4) the garage / upgrade shop. Each stage sets up real game state, then the main loop
-// runs the simulation forward so the shot is a live render, not a still.
+// shots.js — Vice Shores: stages the four screenshots from ?shot=.
+// The game is fully playable; a shot only sets the opening state (position,
+// wanted level, job, money, camera) so the frame reads like the winners':
+// a 5-star chase, an on-foot fight, the title with saves, the garage shop.
+(function () {
+  var VS = window.VS;
 
-import { SPOTS } from './city.js';
-
-function clearCorridor(world, x0, z0, x1, z1) {
-  // Move traffic cars out of the chase corridor so the player car has a clear run.
-  for (const c of world.state.cars) {
-    if (c.kind !== 'traffic') continue;
-    if (c.x > x0 && c.x < x1 && c.z > z0 && c.z < z1) {
-      c.x = 780;
-      c.z = 300 + ((c.id * 97) % 1200);
-      c.speed = 0;
-    }
+  function placeCarAt(x, z, yaw, speed) {
+    var st = VS.state;
+    var car = VS.state.car;
+    if (!car) return;
+    car.group.position.set(x, 0, z);
+    car.yaw = yaw;
+    car.group.rotation.y = yaw;
+    car.speed = speed || 0;
+    st.playerPos.x = x;
+    st.playerPos.z = z;
+    st.playerYaw = yaw;
+    st.playerSpeed = speed || 0;
   }
-}
 
-function baseSetup(world, opts) {
-  const d = world.debug;
-  d.setMoney(opts.money || 0);
-  d.setClock(opts.clock || 18 * 60 + 45);
-  d.setRadio(opts.radio || 0);
-  d.setHealth(opts.health || 100, opts.armor || 0);
-  d.setAmmo(opts.pistol || 24, opts.smg || 0);
-  d.setWeapon(opts.weapon === undefined ? 1 : opts.weapon);
-  if (opts.dialogue) d.setDialogue(opts.dialogue, 30);
-}
+  function spawnChasePack() {
+    // four police cars in pursuit + a burning car ahead, for the chase frame
+    var st = VS.state;
+    var spots = [
+      { x: st.playerPos.x - 26, z: st.playerPos.z - 8 },
+      { x: st.playerPos.x - 30, z: st.playerPos.z + 10 },
+      { x: st.playerPos.x - 14, z: st.playerPos.z + 18 },
+      { x: st.playerPos.x + 22, z: st.playerPos.z - 16 },
+    ];
+    spots.forEach(function (s, i) {
+      var car = VS.makeCarMesh({ name: 'VSPD Interceptor', color: 0xf2f2f2, speed: 1.06 }, true);
+      car.driver = 'police';
+      car.name = VS.POLICE_NAMES[i % VS.POLICE_NAMES.length];
+      car.group.position.set(s.x, 0, s.z);
+      car.yaw = 0;
+      car.group.rotation.y = 0;
+      car.speed = 26;
+      VS.policeCars.push(car);
+    });
+    // a burning wreck ahead on the boulevard, dead in the chase camera's view
+    var wreck = VS.makeCarMesh({ name: 'Calyx Sprint', color: 0xe63946, speed: 1 }, false);
+    wreck.group.position.set(st.playerPos.x + 35, 0, 137);
+    wreck.yaw = 0.2;
+    wreck.group.rotation.y = 0.2;
+    wreck.burning = true;
+    wreck.health = 0;
+    VS.spawnFire(wreck.group.position.x, 1.4, wreck.group.position.z);
+    VS.spawnFire(wreck.group.position.x, 1.8, wreck.group.position.z);
+    VS.spawnFire(wreck.group.position.x, 1.2, wreck.group.position.z);
+    VS.spawnSmoke(wreck.group.position.x, 2.4, wreck.group.position.z, 6);
+  }
 
-export const SHOTS = {
-  '1-chase': {
-    label: '5-star police chase',
-    stage(world) {
-      const s = world.state;
-      const d = world.debug;
-      baseSetup(world, {
-        money: 3400, clock: 19 * 60 + 5, radio: 0,
-        health: 100, armor: 75, pistol: 36, smg: 60, weapon: 1,
-        dialogue: 'Marla: "Five stars, Rook. Sixty seconds. Make them remember you."',
-      });
-      d.setMission(7, 1);
-      s.surviveTimer = 45;
-      // The player in the blue coupe, eastbound on the beachfront boulevard at speed.
-      const coupe = s.cars.find((c) => c.mission === 'coupe');
-      d.placePlayerInCar(coupe, 500, 1500, 0);
-      d.setPlayerCarSpeed(460); // 115 km/h
-      d.setCruise(460); // hold the speed — no input in a staged shot
-      coupe.health = 82;
-      d.setWanted(5);
-      // Helicopter ahead of the player, frozen in the frame so its spotlight
-      // reads (it follows the player in real play; here it is staged).
-      d.spawnHeliAt(1650, 1450);
-      d.freezeHeli();
-      // Three police cars ramming: one behind, one alongside, one ahead.
-      const p1 = d.spawnPoliceAt(370, 1500, 0);
-      p1.speed = 480;
-      const p2 = d.spawnPoliceAt(640, 1430, 0);
-      p2.speed = 470;
-      const p3 = d.spawnPoliceAt(830, 1570, 0);
-      p3.speed = 450;
-      // A wrecked police car burning on the shoulder ahead of the player, so the
-      // fire reads in the frame.
-      d.wreckPoliceAt(1560, 1440);
-      // A roadblock ahead on the boulevard (far enough that the player reaches it
-      // just after the screenshot is taken).
-      d.setRoadblockAt(1800, 1500, 'h');
-      // Clear the chase corridor of traffic, then freeze the rest in place.
-      clearCorridor(world, 350, 1420, 1900, 1580);
-      d.freezeTraffic();
-      s.screen = 'play';
-    },
-  },
+  VS.stageShot = function (name) {
+    var st = VS.state;
+    st.shotMode = name;
+    if (name === 'chase') {
+      st.money = 86250;
+      st.respect = 2600;
+      st.clockMin = 18 * 60 + 49;
+      st.health = 76;
+      st.armor = 58;
+      st.weapons[1].ammo = 30; st.weapons[1].reserve = 60;
+      st.weapons[2].ammo = 30; st.weapons[2].reserve = 90;
+      st.weaponIndex = 2;
+      VS.startJob(6); // HEAT WAVE, stage 1: survive 60s at 4+ stars
+      VS.setWanted(5);
+      // snap the helicopter straight to its hover point so it is in frame
+      if (VS.heli) {
+        VS.heli.group.position.set(st.playerPos.x + 70, 10, st.playerPos.z - 8);
+      }
+      var car = VS.makeCarMesh({ name: 'Rukun Pelo GT', color: 0xff6a00, speed: 1.12 }, false);
+      VS.enterCar(car);
+      placeCarAt(-60, 142, 0, 32);
+      st.camYaw = 0;
+      st.camPitch = 0.22;
+      spawnChasePack();
+      VS.showDialogue('MARLA', 'Ram the Regent before it reaches the water!');
+      VS.shotDrive = true; // keep the throttle open for the frame
+    } else if (name === 'onfoot') {
+      st.money = 6420;
+      st.respect = 140;
+      st.clockMin = 17 * 60 + 19;
+      st.health = 88;
+      st.armor = 25;
+      st.weapons[1].ammo = 12; st.weapons[1].reserve = 48;
+      st.weaponIndex = 1;
+      VS.startJob(1); // PACKAGE RUN
+      st.playerPos.x = -60; st.playerPos.z = 0;
+      st.playerYaw = 0;
+      st.camYaw = -Math.PI / 2;
+      st.camPitch = 0.3;
+      VS.setWanted(2);
+      // pedestrians on the avenue + one being carjacked nearby
+      for (var i = 0; i < 4; i++) {
+        var ped = VS.peds[i];
+        if (ped) {
+          ped.group.position.set(-42 + i * 7, 0, (i % 2 === 0 ? -6 : 6));
+          ped.state = 'flee';
+          ped.fleeTimer = 6;
+        }
+      }
+      var vic = VS.makeCarMesh({ name: 'Sunline Cab', color: 0xffd23e, speed: 0.92 }, false);
+      vic.group.position.set(-28, 0, 0);
+      vic.yaw = 0;
+      vic.group.rotation.y = 0;
+      VS.parked.push(vic);
+      VS.showDialogue('MARLA', 'Package is in Palm Park. Do not open it, do not drop it.');
+      VS.shotAim = true;
+    } else if (name === 'title') {
+      // a filled first save slot, so the title shows a real Continue
+      try {
+        localStorage.setItem(VS.CFG.savePrefix + '0', JSON.stringify({
+          money: 12400, jobIndex: 3, rank: 1, respect: 640,
+          playerPos: { x: -40, z: 80 }, health: 100,
+        }));
+      } catch (e) {}
+      st.money = 12400;
+      st.respect = 640;
+      VS.setMode('title');
+      VS.refreshSaveSlots();
+    } else if (name === 'garage') {
+      st.money = 18450;
+      st.respect = 3900;
+      st.clockMin = 18 * 60 + 45;
+      st.health = 76;
+      st.armor = 58;
+      var car2 = VS.makeCarMesh({ name: 'Rukun Pelo GT', color: 0xff6a00, speed: 1.12 }, false);
+      car2.health = 62;
+      car2.driver = 'player';
+      VS.enterCar(car2);
+      placeCarAt(44, 118, Math.PI, 0);
+      VS.startJob(5); // REPO JOB, already at the delivery stage
+      VS.state.jobStage = 1;
+      VS.placeStageMarker();
+      VS.setMode('garage');
+      VS.showDialogue('JAI', 'That GT took a beating, Rook. Pick a fix and pay up.');
+    }
+    if (name === 'chase' || name === 'onfoot' || name === 'garage') {
+      VS.setMode('playing');
+      if (name === 'garage') VS.setMode('garage');
+    }
+    VS.updateHUDStatic();
+  };
 
-  '2-onfoot': {
-    label: 'On-foot carjacking',
-    stage(world) {
-      const s = world.state;
-      const d = world.debug;
-      baseSetup(world, {
-        money: 850, clock: 18 * 60 + 45, radio: 1,
-        health: 88, armor: 0, pistol: 18, smg: 0, weapon: 1,
-        dialogue: 'Marla: "Package in Palm Park. The pier, quick — and the cops are already watching."',
-      });
-      d.setMission(1, 0);
-      // The player on foot at the intersection, facing the taxi he is carjacking.
-      d.placePlayer(760, 700, 0);
-      const taxi = s.cars.find((c) => c.name === 'Taxi' && c.kind === 'parked') || s.cars[2];
-      taxi.x = 830;
-      taxi.z = 700;
-      taxi.angle = 0;
-      taxi.kind = 'parked';
-      taxi.driver = false;
-      taxi.health = 10000; // the player is shooting at it — it must not blow up mid-shot
-      // The driver, ejected, running away — and two more pedestrians fleeing.
-      s.peds.push(
-        { x: 870, z: 660, angle: 0, speed: 175, state: 'flee', color: 0xffd76a, walkPhase: 1, target: null, down: 0 },
-        { x: 720, z: 760, angle: 2.4, speed: 175, state: 'flee', color: 0x7ad8ff, walkPhase: 2, target: null, down: 0 },
-        { x: 800, z: 640, angle: -1.2, speed: 175, state: 'flee', color: 0xff7a9a, walkPhase: 3, target: null, down: 0 },
-      );
-      // One police car closing in (wanted 1).
-      const cop = d.spawnPoliceAt(560, 700, 0);
-      cop.speed = 320;
-      d.setWanted(1);
-      // The player is shooting at the taxi — lock the aim on it.
-      d.setAimLock(taxi.x, taxi.z);
-      d.setShooting(true);
-      d.freezeTraffic();
-      s.screen = 'play';
-    },
-  },
-
-  '3-title': {
-    label: 'Title screen with save slots',
-    stage(world) {
-      const d = world.debug;
-      d.seedSlots();
-      d.showTitle();
-    },
-  },
-
-  '4-garage': {
-    label: 'Garage / upgrade shop',
-    stage(world) {
-      const s = world.state;
-      const d = world.debug;
-      baseSetup(world, {
-        money: 2100, clock: 19 * 60 + 20, radio: 2,
-        health: 100, armor: 50, pistol: 24, smg: 0, weapon: 1,
-      });
-      d.setMission(4, 1);
-      // The player in the red sports car, parked on the road in front of Marla's
-      // garage (south of the garage building, not inside it).
-      const sport = s.cars.find((c) => c.mission === 'sport');
-      d.placePlayerInCar(sport, 1500, 720, -Math.PI / 2);
-      sport.health = 64;
-      d.openGarage();
-    },
-  },
-};
-
-export function stageShot(world, name) {
-  const shot = SHOTS[name];
-  if (!shot) throw new Error(`unknown shot: ${name}`);
-  shot.stage(world);
-  return shot;
-}
+  VS.applyShotParams = function () {
+    var q = new URLSearchParams(window.location.search);
+    var seed = parseInt(q.get('seed') || '7', 10);
+    if (!isNaN(seed)) { VS.state.seed = seed; VS.setSeed(seed); }
+    var shot = q.get('shot') || '';
+    VS.state.shotMode = shot;
+    return shot;
+  };
+})();

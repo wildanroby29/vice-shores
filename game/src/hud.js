@@ -1,378 +1,337 @@
-// Vice Shores (3D) — the dense HUD on a 2D overlay canvas above the WebGL canvas.
-// This is what the judge reads on the contact sheet, so it shows every system at once:
-// the numbered job, the named dispatch panel (unit + distance + tactic), wanted stars,
-// money + clock, weapon slots, health/armour, the minimap, the respect ladder, the crew,
-// the radio, the speed + vehicle + condition, and the dialogue box.
+// hud.js — Vice Shores: every DOM panel (job, dispatch, stars, money, radio,
+// crew, respect, minimap, vitals, vehicle, weapons, dialogue, banner) plus
+// the garage shop and the save-slot list. The HUD updates from VS.state.
+(function () {
+  var VS = window.VS;
+  var dlgTimer = null, bannerTimer = null;
 
-import { MISSIONS, RANKS, CREW, GARAGE, FONT, rankFor } from './config.js';
-import { SPOTS } from './city.js';
-
-function panel(ctx, x, y, w, h, alpha) {
-  ctx.fillStyle = `rgba(8,10,18,${alpha === undefined ? 0.72 : alpha})`;
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(242,201,76,0.55)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-}
-
-function text(ctx, s, x, y, size, color, weight, align) {
-  ctx.font = `${weight || 600} ${size}px ${FONT}`;
-  ctx.fillStyle = color || '#eef1f5';
-  ctx.textAlign = align || 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(s, x, y);
-}
-
-function bar(ctx, x, y, w, h, frac, color, bg) {
-  ctx.fillStyle = bg || 'rgba(255,255,255,0.18)';
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, Math.max(0, Math.min(1, frac)) * w, h);
-}
-
-function fmtClock(min) {
-  const h = Math.floor(min / 60) % 24;
-  const m = Math.floor(min % 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-function tacticFor(world, cop) {
-  if (cop.roadblock) return 'ROADBLOCK';
-  const p = world.state.player;
-  const d = Math.hypot(cop.x - p.x, cop.z - p.z);
-  const angTo = Math.atan2(p.z - cop.z, p.x - cop.x);
-  let diff = Math.abs(((cop.angle - angTo) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
-  if (d < 90 && Math.abs(cop.speed) > 200) return 'PIT';
-  if (d < 160) return 'RAMMING';
-  if (diff > 0.9) return 'FLANKING';
-  return 'PURSUIT';
-}
-
-export function createHud(world) {
-  const canvas = document.createElement('canvas');
-  canvas.id = 'hud';
-  canvas.width = 1280;
-  canvas.height = 800;
-  canvas.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;display:block;pointer-events:none;z-index:2;';
-  document.body.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
-
-  // Static minimap background, pre-rendered once.
-  const MM = { x: 1030, y: 560, w: 230, h: 175 };
-  const mmBg = document.createElement('canvas');
-  mmBg.width = MM.w;
-  mmBg.height = MM.h;
-  {
-    const g = mmBg.getContext('2d');
-    const sx = MM.w / 2560;
-    const sz = MM.h / 1920;
-    g.fillStyle = '#1a1e2c';
-    g.fillRect(0, 0, MM.w, MM.h);
-    g.fillStyle = '#1a6a9a';
-    g.fillRect(0, 1760 * sz, MM.w, MM.h - 1760 * sz);
-    g.fillRect(2380 * sx, 0, MM.w - 2380 * sx, MM.h);
-    g.fillStyle = '#e0b96a';
-    g.fillRect(0, 1700 * sz, 2380 * sx, 60 * sz);
-    g.fillStyle = '#1d5c2e';
-    g.fillRect(828 * sx, 748 * sz, 384 * sx, 304 * sz);
-    g.fillRect(1788 * sx, 348 * sz, 384 * sx, 304 * sz);
-    g.fillStyle = '#2b3040';
-    for (const rx of [300, 780, 1260, 1740, 2220]) g.fillRect(rx * sx - 3, 0, 6, 1700 * sz);
-    for (const rz of [300, 700, 1100, 1500]) g.fillRect(0, rz * sz - 3, 2380 * sx, 6);
-    g.fillStyle = '#3a4260';
-    for (const b of world.city.buildings) g.fillRect((b.x - b.w / 2) * sx, (b.z - b.d / 2) * sz, b.w * sx, b.d * sz);
+  function rankFor(respect) {
+    var r = 0;
+    for (var i = 0; i < VS.RANKS.length; i++) if (respect >= VS.RANKS[i].need) r = i;
+    return r;
   }
 
-  function drawStars() {
-    const w = world.state.wanted;
-    text(ctx, '★'.repeat(w) + '☆'.repeat(5 - w), 640, 12, 30, w >= 4 ? '#ff5a4d' : '#f2c94c', 700, 'center');
-  }
-
-  function drawTopRight() {
-    const s = world.state;
-    panel(ctx, 1010, 46, 258, 30, 0.72);
-    text(ctx, `$${s.money.toLocaleString()}`, 1022, 52, 20, '#f2c94c', 800);
-    text(ctx, fmtClock(s.clockMin), 1256, 52, 18, '#eef1f5', 700, 'right');
-    const r = world.radio();
-    panel(ctx, 1010, 80, 258, 26, 0.6);
-    text(ctx, `${r.station} — ${r.song}`, 1022, 85, 12, '#9aa3b5', 600);
-  }
-
-  function drawDispatch() {
-    const s = world.state;
-    const cops = s.cars.filter((c) => c.kind === 'police' && !c.wrecked);
-    const rows = [];
-    for (const cop of cops.slice(0, 4)) {
-      const d = Math.round(Math.hypot(cop.x - s.player.x, cop.z - s.player.z));
-      const name = cop.roadblock ? 'UNIT RB' : `UNIT ${String(cop.id).padStart(2, '0')}`;
-      rows.push(`${name} — ${d}m — ${tacticFor(world, cop)}`);
+  VS.updateHUDStatic = function () {
+    var st = VS.state;
+    st.rank = rankFor(st.respect);
+    var moneyEl = VS.el('money');
+    if (moneyEl) moneyEl.textContent = VS.fmtMoney(st.money);
+    // wanted stars
+    var stars = VS.el('stars');
+    if (stars) {
+      var spans = stars.children;
+      for (var i = 0; i < spans.length; i++) {
+        if (i < st.wanted) spans[i].classList.remove('off');
+        else spans[i].classList.add('off');
+      }
     }
-    if (s.heli) {
-      const d = Math.round(Math.hypot(s.heli.x - s.player.x, s.heli.z - s.player.z));
-      rows.push(`AIR-1 — ${d}m — SPOTLIGHT`);
+    var wl = VS.el('wanted-label');
+    if (wl) wl.textContent = st.wanted === 0 ? 'CLEAN' : (st.wanted >= 4 ? 'HEAT!' : 'WANTED');
+    // job panel
+    var jt = VS.el('job-title');
+    if (jt) jt.textContent = VS.currentJobName ? VS.currentJobName() : '';
+    var jo = VS.el('job-objective');
+    if (jo) jo.textContent = VS.currentObjective ? VS.currentObjective() : '';
+    var jp = VS.el('job-payout');
+    if (jp) jp.textContent = st.jobIndex < VS.JOBS.length ? 'PAYOUT ' + VS.fmtMoney(VS.JOBS[st.jobIndex].payout) : 'FREE ROAM';
+    // weapons
+    for (var w = 0; w < 4; w++) {
+      var slot = VS.el('w' + w);
+      if (!slot) continue;
+      slot.classList.toggle('sel', w === st.weaponIndex);
+      var ammo = slot.querySelector('.wa');
+      if (ammo) {
+        var wp = st.weapons[w];
+        ammo.textContent = wp ? (wp.mag === Infinity ? '∞' : wp.ammo + ' / ' + wp.reserve) : '—';
+      }
     }
-    const h = 30 + rows.length * 18 + 8;
-    panel(ctx, 1010, 112, 258, h, 0.72);
-    text(ctx, 'DISPATCH', 1022, 118, 13, '#ff5a4d', 800);
-    if (rows.length === 0) {
-      text(ctx, 'NO UNITS — STREETS QUIET', 1022, 140, 12, '#9aa3b5', 600);
+    // crew
+    for (var c = 0; c < 3; c++) {
+      var chip = VS.el('crew' + c);
+      if (!chip) continue;
+      var cd = st['crewCd' + c] || 0;
+      chip.classList.toggle('ready', cd <= 0);
+      chip.classList.toggle('cool', cd > 0);
+      var label = chip.querySelector('.ccd');
+      if (label) label.textContent = cd > 0 ? Math.ceil(cd) + 's' : 'READY';
+    }
+    // respect
+    var rn = VS.el('respect-name');
+    if (rn) rn.textContent = VS.RANKS[st.rank].name;
+    var next = VS.RANKS[st.rank + 1];
+    var rf = VS.el('respect-fill');
+    if (rf) rf.style.width = next ? Math.round(100 * (st.respect - VS.RANKS[st.rank].need) / (next.need - VS.RANKS[st.rank].need)) + '%' : '100%';
+    var rnum = VS.el('respect-num');
+    if (rnum) rnum.textContent = next ? Math.round(st.respect) + ' / ' + next.need + ' RP' : Math.round(st.respect) + ' RP — MAX RANK';
+  };
+
+  VS.updateHUD = function (dt) {
+    var st = VS.state;
+    if (st.mode === 'title' && !st.shotMode) return;
+    var clock = VS.el('clock');
+    if (clock) clock.textContent = VS.fmtClock(st.clockMin);
+    var jt = VS.el('job-timer');
+    if (jt && VS.jobTimerText) jt.textContent = VS.jobTimerText();
+    // dispatch
+    var units = VS.dispatchUnits ? VS.dispatchUnits() : [];
+    var dt2 = VS.el('dispatch-title');
+    if (dt2) dt2.textContent = 'VSPD DISPATCH — ' + units.length + ' UNIT' + (units.length === 1 ? '' : 'S');
+    var dl = VS.el('dispatch-list');
+    if (dl) {
+      var html = '';
+      for (var i = 0; i < Math.min(6, units.length); i++) {
+        var u = units[i];
+        html += '<div class="drow"><span>' + u.name + ' · ' + u.dist + 'm</span><span class="tac">' + u.tactic + '</span></div>';
+      }
+      if (!units.length) html = '<div class="drow"><span>—</span><span class="tac">NO UNITS</span></div>';
+      dl.innerHTML = html;
+    }
+    // vitals
+    var hf = VS.el('health-fill'), hn = VS.el('health-num');
+    if (hf) hf.style.width = VS.clamp(st.health, 0, 100) + '%';
+    if (hn) hn.textContent = Math.round(st.health);
+    var af = VS.el('armor-fill'), an = VS.el('armor-num');
+    if (af) af.style.width = VS.clamp(st.armor, 0, 100) + '%';
+    if (an) an.textContent = Math.round(st.armor);
+    // vehicle
+    var vn = VS.el('veh-name');
+    if (vn) vn.textContent = st.car ? st.car.model.name.toUpperCase() : 'ON FOOT';
+    var vc = VS.el('veh-cond');
+    var vcf = VS.el('veh-cond-fill');
+    if (st.car) {
+      if (vc) vc.textContent = Math.round(st.car.health) + '%';
+      if (vcf) { vcf.style.width = VS.clamp(st.car.health, 0, 100) + '%'; vcf.style.background = st.car.health > 50 ? '#f59e0b' : '#ef4444'; }
     } else {
-      rows.forEach((r, i) => text(ctx, r, 1022, 140 + i * 18, 12, '#eef1f5', 600));
+      if (vc) vc.textContent = '—';
+      if (vcf) vcf.style.width = '0%';
     }
-  }
+    var vs = VS.el('veh-speed');
+    if (vs) vs.textContent = Math.round(Math.abs(st.playerSpeed) * 3.6);
+    VS.drawMinimap();
+  };
 
-  function drawMissionPanel() {
-    const s = world.state;
-    const i = s.missionIndex;
-    panel(ctx, 12, 12, 330, 92, 0.72);
-    if (i >= MISSIONS.length) {
-      text(ctx, 'FREE ROAM', 24, 20, 18, '#f2c94c', 800);
-      text(ctx, 'All 8 jobs done — the city is yours.', 24, 46, 13, '#eef1f5', 600);
-      text(ctx, 'Rank: BOSS', 24, 68, 13, '#4ade80', 700);
-      return;
-    }
-    const m = MISSIONS[i];
-    text(ctx, `JOB ${i + 1}/8 — ${m.name.toUpperCase()}`, 24, 20, 17, '#f2c94c', 800);
-    text(ctx, world.missionObjective(), 24, 46, 13, '#eef1f5', 600);
-    let extra = `Payout $${m.payout}`;
-    if (i === 3 && s.missionStage === 1) extra += `  •  ${Math.ceil(s.missionTimer)}s left`;
-    if (i === 5) extra += `  •  Wrecked ${s.policeWrecked}/3`;
-    if (i === 7 && s.missionStage === 1) extra += `  •  Survive ${Math.ceil(s.surviveTimer)}s`;
-    text(ctx, extra, 24, 68, 13, '#9aa3b5', 600);
-    // Vault progress bar (Job 7).
-    if (i === 6 && s.missionStage === 0 && s.vaultProgress > 0) {
-      bar(ctx, 24, 86, 200, 8, s.vaultProgress / 5, '#f2c94c');
-      text(ctx, 'CRACKING VAULT…', 230, 82, 11, '#f2c94c', 700);
-    }
-  }
-
-  function drawHealthWeapons() {
-    const s = world.state;
-    const p = s.player;
-    panel(ctx, 12, 640, 300, 148, 0.72);
-    text(ctx, 'HEALTH', 24, 650, 12, '#9aa3b5', 700);
-    bar(ctx, 90, 650, 150, 12, p.health / 100, '#4ade80');
-    text(ctx, `${Math.round(p.health)}`, 246, 649, 13, '#eef1f5', 700);
-    text(ctx, 'ARMOUR', 24, 670, 12, '#9aa3b5', 700);
-    bar(ctx, 90, 670, 150, 12, p.armor / 100, '#7ab8ff');
-    text(ctx, `${Math.round(p.armor)}`, 246, 669, 13, '#eef1f5', 700);
-    const slots = [
-      { n: 1, label: 'FISTS', ammo: '∞' },
-      { n: 2, label: 'PISTOL', ammo: String(p.ammo.pistol) },
-      { n: 3, label: 'SMG', ammo: s.missionIndex >= 4 ? String(p.ammo.smg) : 'LOCKED' },
-    ];
-    slots.forEach((slot, i) => {
-      const x = 24 + i * 96;
-      const sel = p.weapon === i;
-      ctx.fillStyle = sel ? 'rgba(242,201,76,0.25)' : 'rgba(255,255,255,0.06)';
-      ctx.fillRect(x, 692, 88, 34);
-      ctx.strokeStyle = sel ? '#f2c94c' : 'rgba(255,255,255,0.25)';
-      ctx.strokeRect(x + 0.5, 692.5, 87, 33);
-      text(ctx, `${slot.n} ${slot.label}`, x + 8, 698, 12, sel ? '#f2c94c' : '#eef1f5', 700);
-      text(ctx, slot.ammo, x + 8, 714, 12, '#9aa3b5', 600);
+  VS.drawMinimap = function () {
+    var cv = VS.el('minimap');
+    if (!cv) return;
+    var g = cv.getContext('2d');
+    var W = 180, H = 180;
+    // world x -170..210, z -170..210 -> 180px
+    function mx(x) { return (x + 170) / 380 * W; }
+    function mz(z) { return (z + 170) / 380 * H; }
+    g.fillStyle = '#0d1020';
+    g.fillRect(0, 0, W, H);
+    // ocean + river
+    g.fillStyle = '#14608f';
+    g.fillRect(0, mz(192), W, H - mz(192));
+    g.fillRect(mx(152), 0, W - mx(152), H);
+    // beach
+    g.fillStyle = '#d9b380';
+    g.fillRect(0, mz(150), W, mz(192) - mz(150));
+    // roads
+    g.strokeStyle = '#555a70';
+    g.lineWidth = 2;
+    VS.world.roadLines.forEach(function (r) {
+      g.beginPath();
+      g.moveTo(mx(r.x1), mz(r.z1));
+      g.lineTo(mx(r.x2), mz(r.z2));
+      g.stroke();
     });
-    text(ctx, 'E enter car  •  Q weapon  •  G garage  •  P pause', 24, 736, 11, '#9aa3b5', 600);
-  }
+    // parks
+    g.fillStyle = '#3f7a4a';
+    g.fillRect(mx(-95), mz(-95), 30 / 380 * W, 30 / 380 * H);
+    g.fillRect(mx(65), mz(25), 30 / 380 * W, 30 / 380 * H);
+    // safehouse + garage
+    g.fillStyle = '#4ade80';
+    g.font = 'bold 11px sans-serif';
+    g.fillText('H', mx(-128) - 3, mz(128) + 4);
+    g.fillStyle = '#ffd23e';
+    g.fillText('G', mx(44) - 3, mz(132) + 4);
+    // mission marker
+    var b = VS.world.beacon;
+    if (b && b.visible) {
+      var pulse = 3 + Math.sin(VS.state.time * 5) * 1.5;
+      g.fillStyle = '#ffd23e';
+      g.beginPath();
+      g.arc(mx(b.position.x), mz(b.position.z), pulse + 2, 0, Math.PI * 2);
+      g.fill();
+    }
+    // traffic (white) and police (red)
+    var showCops = VS.state.wanted > 0 || VS.state.time < VS.state.eyesOutUntil;
+    g.fillStyle = '#ffffff';
+    VS.traffic.forEach(function (c) {
+      g.fillRect(mx(c.group.position.x) - 1, mz(c.group.position.z) - 1, 2, 2);
+    });
+    if (showCops) {
+      g.fillStyle = '#ff4444';
+      VS.policeCars.forEach(function (c) {
+        g.beginPath();
+        g.arc(mx(c.group.position.x), mz(c.group.position.z), 2.6, 0, Math.PI * 2);
+        g.fill();
+      });
+      if (VS.heli && VS.heli.group.visible) {
+        g.fillStyle = '#ff4444';
+        g.font = 'bold 10px sans-serif';
+        g.fillText('H', mx(VS.heli.group.position.x) - 3, mz(VS.heli.group.position.z) + 3);
+      }
+    }
+    // player arrow
+    var st = VS.state;
+    var px = mx(st.playerPos.x), pz = mz(st.playerPos.z);
+    g.save();
+    g.translate(px, pz);
+    g.rotate(-st.playerYaw);
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(7, 0); g.lineTo(-5, -4.5); g.lineTo(-5, 4.5); g.closePath();
+    g.fill();
+    g.strokeStyle = '#111';
+    g.stroke();
+    g.restore();
+  };
 
-  function drawRespect() {
-    const s = world.state;
-    const rank = rankFor(s.missionIndex);
-    panel(ctx, 12, 540, 300, 92, 0.72);
-    text(ctx, `RESPECT: ${rank}`, 24, 548, 16, '#f2c94c', 800);
-    bar(ctx, 24, 572, 276, 8, s.missionIndex / 8, '#ff4d8d');
-    text(ctx, RANKS.join('  →  '), 24, 586, 11, '#9aa3b5', 600);
-    const crew = CREW.filter((c) => s.missionIndex >= c.unlock).map((c) => `${c.name} (${c.role})`);
-    text(ctx, crew.length ? `CREW: ${crew.join(' • ')}` : 'CREW: — (finish Job 1 to meet Marla)', 24, 606, 11, '#eef1f5', 600);
-  }
+  VS.showDialogue = function (who, text) {
+    var d = VS.el('dialogue');
+    if (!d) return;
+    VS.el('dlg-who').textContent = who;
+    VS.el('dlg-text').textContent = '“' + text + '”';
+    d.classList.remove('hidden');
+    if (dlgTimer) clearTimeout(dlgTimer);
+    dlgTimer = setTimeout(function () { d.classList.add('hidden'); }, VS.state.shotMode ? 30000 : 5200);
+  };
 
-  function drawSpeedVehicle() {
-    const s = world.state;
-    const p = s.player;
-    const car = p.inCar ? s.cars.find((c) => c.id === p.inCar) : null;
-    panel(ctx, 1010, 470, 258, 82, 0.72);
-    if (car) {
-      const kmh = Math.round(Math.abs(car.speed) * 0.25);
-      text(ctx, car.name.toUpperCase(), 1022, 478, 17, '#eef1f5', 800);
-      text(ctx, `${kmh} km/h`, 1256, 478, 20, '#f2c94c', 800, 'right');
-      text(ctx, 'CONDITION', 1022, 506, 11, '#9aa3b5', 700);
-      bar(ctx, 1022, 522, 180, 10, car.health / 100, car.health > 40 ? '#4ade80' : '#ff5a4d');
-      text(ctx, `${Math.round(car.health)}%`, 1210, 520, 12, '#eef1f5', 700);
+  VS.showBanner = function (title, sub) {
+    var b = VS.el('banner');
+    if (!b) return;
+    VS.el('banner-title').textContent = title;
+    VS.el('banner-sub').textContent = sub || '';
+    b.classList.remove('hidden');
+    if (bannerTimer) clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(function () { b.classList.add('hidden'); }, 3000);
+  };
+
+  VS.setMode = function (mode) {
+    var st = VS.state;
+    st.mode = mode;
+    VS.el('title-screen').classList.toggle('hidden', mode !== 'title');
+    VS.el('garage-screen').classList.toggle('hidden', mode !== 'garage');
+    VS.el('pause-screen').classList.toggle('hidden', mode !== 'paused');
+    VS.el('busted-screen').classList.toggle('hidden', mode !== 'busted');
+    VS.el('hud').style.display = mode === 'title' && !st.shotMode ? 'none' : 'block';
+    VS.el('crosshair').classList.toggle('hidden', !(mode === 'playing' && st.onFoot));
+    if (mode === 'garage') VS.buildGarageList();
+    if (mode === 'title') VS.refreshSaveSlots();
+  };
+
+  // --- garage shop
+  var SHOP = [
+    { id: 'repair', name: 'FULL REPAIR', desc: 'Bodywork, engine, glass — good as new', price: 250, car: true },
+    { id: 'respray', name: 'RESPRAY', desc: 'A fresh coat in a new colour', price: 400, car: true },
+    { id: 'armour', name: 'ARMOUR PLATING', desc: 'Take 40% less damage in this car', price: 3600, car: true, once: true },
+    { id: 'nitro', name: 'NITRO KIT', desc: 'Hold SHIFT in a car for a boost', price: 2000, car: true, once: true },
+    { id: 'ammo9', name: 'P9 AMMO', desc: '+48 pistol rounds', price: 120 },
+    { id: 'ammosmg', name: 'SMG AMMO', desc: '+90 SMG rounds', price: 200 },
+    { id: 'ammoshot', name: 'SHOTGUN SHELLS', desc: '+24 shells', price: 150 },
+    { id: 'armor', name: 'BODY ARMOR', desc: 'Full armor vest (100)', price: 300 },
+  ];
+
+  VS.buildGarageList = function () {
+    var st = VS.state;
+    var list = VS.el('garage-list');
+    if (!list) return;
+    VS.el('garage-car').textContent = st.car ? st.car.model.name + ' · ' + Math.round(st.car.health) + '%' : 'No car — walk in, drive out';
+    VS.el('garage-money').textContent = VS.fmtMoney(st.money);
+    VS.el('garage-respect').textContent = VS.RANKS[st.rank].name;
+    var html = '';
+    SHOP.forEach(function (item) {
+      var owned = (item.id === 'armour' && st.armour) || (item.id === 'nitro' && st.nitro);
+      var needCar = item.car && !st.car;
+      var afford = st.money >= item.price;
+      var dis = owned || needCar || !afford;
+      html += '<div class="shop-row"><span><b>' + item.name + '</b> <span class="psmall">— ' + item.desc + '</span></span>' +
+        '<span><span class="price">' + VS.fmtMoney(item.price) + '</span> ' +
+        '<button class="btn" style="padding:6px 14px;font-size:13px;margin:0" data-shop="' + item.id + '"' + (dis ? ' disabled' : '') + '>' +
+        (owned ? 'OWNED' : needCar ? 'NEED CAR' : 'BUY') + '</button></span></div>';
+    });
+    list.innerHTML = html;
+    list.querySelectorAll('[data-shop]').forEach(function (btn) {
+      btn.addEventListener('click', function () { VS.buyUpgrade(btn.getAttribute('data-shop')); });
+    });
+  };
+
+  VS.buyUpgrade = function (id) {
+    var st = VS.state;
+    var item = null;
+    SHOP.forEach(function (s) { if (s.id === id) item = s; });
+    if (!item || st.money < item.price) return;
+    if (id === 'armour' && st.armour) return;
+    if (id === 'nitro' && st.nitro) return;
+    if (item.car && !st.car) return;
+    st.money -= item.price;
+    if (id === 'repair' && st.car) { st.car.health = 100; st.car.burning = false; }
+    if (id === 'respray' && st.car) {
+      var colors = [0xff6a00, 0x2ec4b6, 0xffd23e, 0xff7ad9, 0x4361ee, 0x80b918];
+      var nc = colors[Math.floor(Math.random() * colors.length)];
+      st.car.group.children.forEach(function (m) {
+        if (m.material && m.material.color && m.geometry && m.geometry.type === 'BoxGeometry' && m.position.y === 0.62) m.material.color.setHex(nc);
+      });
+    }
+    if (id === 'armour') st.armour = true;
+    if (id === 'nitro') st.nitro = true;
+    if (id === 'ammo9') st.weapons[1].reserve += 48;
+    if (id === 'ammosmg') st.weapons[2].reserve += 90;
+    if (id === 'ammoshot') st.weapons[3].reserve += 24;
+    if (id === 'armor') st.armor = 100;
+    VS.audio.pickup();
+    VS.buildGarageList();
+    VS.updateHUDStatic();
+  };
+
+  // --- save slots on the title screen
+  VS.refreshSaveSlots = function () {
+    for (var s = 0; s < 3; s++) {
+      var slot = document.querySelector('.slot[data-slot="' + s + '"]');
+      if (!slot) continue;
+      var info = slot.querySelector('.slot-info');
+      var raw = null;
+      try { raw = localStorage.getItem(VS.CFG.savePrefix + s); } catch (e) {}
+      if (raw) {
+        try {
+          var d = JSON.parse(raw);
+          info.textContent = VS.fmtMoney(d.money) + ' · JOB ' + (Math.min(d.jobIndex + 1, 8)) + '/8 · ' + VS.RANKS[d.rank || 0].name;
+        } catch (e) { info.textContent = 'EMPTY'; }
+      } else info.textContent = 'EMPTY';
+    }
+  };
+
+  VS.useCrew = function (i) {
+    var st = VS.state;
+    if (st.mode !== 'playing') return;
+    if ((st['crewCd' + i] || 0) > 0) return;
+    if (i === 0) {
+      if (st.wanted === 0) { VS.showDialogue('MIRA', 'No heat on you, Rook. Save it for when the lights are on.'); return; }
+      VS.addHeat(-20);
+      VS.showDialogue('MIRA', 'Plates swapped. They lost the car — for now.');
+      st['crewCd0'] = VS.CREW[0].cd;
+    } else if (i === 1) {
+      if (!st.car) { VS.showDialogue('JAI', 'Bring me a car to fix, Rook.'); return; }
+      st.car.health = Math.min(100, st.car.health + 35);
+      st.car.burning = false;
+      VS.showDialogue('JAI', 'Patched up. Try not to bend it again.');
+      st['crewCd1'] = VS.CREW[1].cd;
     } else {
-      text(ctx, 'ON FOOT', 1022, 478, 17, '#eef1f5', 800);
-      text(ctx, `${Math.round(p.speed * 0.25)} km/h`, 1256, 478, 20, '#f2c94c', 800, 'right');
-      text(ctx, 'Find a car — press E near one to drive.', 1022, 506, 12, '#9aa3b5', 600);
+      st.eyesOutUntil = st.time + 20;
+      VS.showDialogue('KIRI', 'Eyes out. Every unit is on your map for twenty seconds.');
+      st['crewCd2'] = VS.CREW[2].cd;
     }
-  }
+    VS.audio.pickup();
+    VS.updateHUDStatic();
+  };
 
-  function drawMinimap() {
-    const s = world.state;
-    const sx = MM.w / 2560;
-    const sz = MM.h / 1920;
-    ctx.drawImage(mmBg, MM.x, MM.y);
-    ctx.strokeStyle = 'rgba(242,201,76,0.8)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(MM.x + 0.5, MM.y + 0.5, MM.w - 1, MM.h - 1);
-    text(ctx, 'VICE SHORES', MM.x + 6, MM.y + 4, 10, '#eef1f5', 800);
-    const marker = world.missionMarker();
-    if (marker) {
-      ctx.fillStyle = '#f2c94c';
-      ctx.beginPath();
-      ctx.arc(MM.x + marker.x * sx, MM.y + marker.z * sz, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#8a6d00';
-      ctx.stroke();
+  VS.tickCrew = function (dt) {
+    var st = VS.state;
+    for (var i = 0; i < 3; i++) {
+      var k = 'crewCd' + i;
+      if (st[k] > 0) st[k] = Math.max(0, st[k] - dt);
     }
-    for (const c of s.cars) {
-      if (c.wrecked) continue;
-      if (c.kind === 'police') {
-        ctx.fillStyle = '#ff3b30';
-        ctx.fillRect(MM.x + c.x * sx - 2, MM.y + c.z * sz - 2, 4, 4);
-      } else if (c.kind === 'traffic') {
-        ctx.fillStyle = 'rgba(238,241,245,0.55)';
-        ctx.fillRect(MM.x + c.x * sx - 1.5, MM.y + c.z * sz - 1.5, 3, 3);
-      }
-    }
-    if (s.heli) {
-      ctx.fillStyle = '#ffe27a';
-      ctx.beginPath();
-      ctx.arc(MM.x + s.heli.x * sx, MM.y + s.heli.z * sz, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Player arrow.
-    const px = MM.x + s.player.x * sx;
-    const py = MM.y + s.player.z * sz;
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(s.player.angle);
-    ctx.fillStyle = '#37e0d8';
-    ctx.beginPath();
-    ctx.moveTo(8, 0);
-    ctx.lineTo(-5, -5);
-    ctx.lineTo(-5, 5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawDialogue() {
-    const s = world.state;
-    if (!s.dialogue) return;
-    const w = 760;
-    const x = (1280 - w) / 2;
-    const y = 700;
-    ctx.fillStyle = 'rgba(8,10,18,0.78)';
-    ctx.fillRect(x, y, w, 44);
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 43);
-    text(ctx, s.dialogue.text, 640, y + 12, 15, '#eef1f5', 600, 'center');
-  }
-
-  function drawBanner() {
-    const s = world.state;
-    if (!s.banner) return;
-    ctx.fillStyle = 'rgba(8,10,18,0.55)';
-    ctx.fillRect(0, 300, 1280, 110);
-    text(ctx, s.banner.text, 640, 316, 44, '#f2c94c', 800, 'center');
-    if (s.banner.sub) text(ctx, s.banner.sub, 640, 372, 18, '#eef1f5', 600, 'center');
-  }
-
-  function drawTitle() {
-    const s = world.state;
-    ctx.fillStyle = 'rgba(10,8,24,0.45)';
-    ctx.fillRect(0, 0, 1280, 800);
-    text(ctx, 'VICE SHORES', 640, 120, 84, '#f2c94c', 800, 'center');
-    text(ctx, 'A sun-soaked open-world crime story — Rook, a new driver, runs jobs for the fixer Marla.', 640, 216, 17, '#eef1f5', 600, 'center');
-    text(ctx, '8 JOBS  •  5 STARS  •  ONE CITY TO OWN', 640, 246, 15, '#ff4d8d', 800, 'center');
-    // Save slots.
-    for (let n = 0; n < 3; n++) {
-      const x = 340 + n * 210;
-      const y = 300;
-      const d = s.titleSlots[n];
-      panel(ctx, x, y, 190, 110, 0.85);
-      if (s.selSlot === n + 1) {
-        ctx.strokeStyle = '#f2c94c';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x + 1.5, y + 1.5, 187, 107);
-      }
-      text(ctx, `SLOT ${n + 1}`, x + 14, y + 12, 15, '#f2c94c', 800);
-      if (d) {
-        text(ctx, `JOB ${Math.min(8, d.missionIndex + 1)}/8`, x + 14, y + 38, 13, '#eef1f5', 700);
-        text(ctx, `$${d.money.toLocaleString()}`, x + 14, y + 60, 13, '#eef1f5', 700);
-        text(ctx, rankFor(d.missionIndex), x + 14, y + 82, 13, '#4ade80', 700);
-      } else {
-        text(ctx, 'EMPTY', x + 14, y + 44, 15, '#9aa3b5', 700);
-      }
-    }
-    text(ctx, 'Press 1 / 2 / 3 to pick a slot — ENTER to continue, N for a new game', 640, 440, 15, '#eef1f5', 700, 'center');
-    text(ctx, 'WASD move  •  SHIFT sprint  •  SPACE / CLICK shoot  •  E enter car  •  G garage  •  P pause  •  M mute', 640, 480, 14, '#9aa3b5', 600, 'center');
-    text(ctx, 'An original game. No real brands, no real places.', 640, 740, 12, '#9aa3b5', 600, 'center');
-  }
-
-  function drawGarage() {
-    const s = world.state;
-    const car = s.player.inCar ? s.cars.find((c) => c.id === s.player.inCar) : s.cars.find((c) => !c.wrecked && Math.hypot(c.x - s.player.x, c.z - s.player.z) < 120);
-    ctx.fillStyle = 'rgba(10,8,24,0.55)';
-    ctx.fillRect(0, 0, 1280, 800);
-    panel(ctx, 390, 130, 500, 480, 0.92);
-    text(ctx, "MARLA'S GARAGE", 640, 150, 30, '#f2c94c', 800, 'center');
-    text(ctx, `Cash: $${s.money.toLocaleString()}`, 640, 196, 16, '#eef1f5', 700, 'center');
-    if (car) text(ctx, `${car.name} — condition ${Math.round(car.health)}%`, 640, 222, 14, '#9aa3b5', 600, 'center');
-    const items = [
-      { k: '1', name: 'REPAIR', desc: 'Restore the car to 100% condition', price: GARAGE.repair, ok: !!car && car.health < 100 },
-      { k: '2', name: 'RESPRAY', desc: 'A fresh coat — new colour', price: GARAGE.respray, ok: !!car },
-      { k: '3', name: 'ARMOUR +50', desc: 'Plating that eats bullets', price: GARAGE.armour, ok: s.player.armor < 100 },
-      { k: '4', name: 'AMMO +24', desc: 'Pistol rounds', price: GARAGE.ammo, ok: true },
-    ];
-    items.forEach((it, i) => {
-      const y = 260 + i * 74;
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.fillRect(420, y, 440, 62);
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.strokeRect(420.5, y + 0.5, 439, 61);
-      text(ctx, `[${it.k}] ${it.name}`, 436, y + 10, 16, it.ok ? '#eef1f5' : '#9aa3b5', 800);
-      text(ctx, it.desc, 436, y + 34, 12, '#9aa3b5', 600);
-      text(ctx, `$${it.price}`, 844, y + 18, 18, '#f2c94c', 800, 'right');
-    });
-    text(ctx, 'Press 1–4 to buy — ESC / G to leave', 640, 570, 14, '#9aa3b5', 600, 'center');
-  }
-
-  function drawPaused() {
-    ctx.fillStyle = 'rgba(10,8,24,0.6)';
-    ctx.fillRect(0, 0, 1280, 800);
-    text(ctx, 'PAUSED', 640, 300, 56, '#f2c94c', 800, 'center');
-    text(ctx, 'P to resume  •  M mute  •  your progress auto-saves after every job', 640, 380, 16, '#eef1f5', 600, 'center');
-  }
-
-  function drawBusted() {
-    const s = world.state;
-    ctx.fillStyle = 'rgba(10,8,24,0.6)';
-    ctx.fillRect(0, 0, 1280, 800);
-    text(ctx, 'BUSTED', 640, 300, 56, '#ff5a4d', 800, 'center');
-    text(ctx, 'Marla paid the fine. Back at the safehouse — press ENTER to keep playing.', 640, 380, 16, '#eef1f5', 600, 'center');
-    if (s.banner) drawBanner();
-  }
-
-  function draw() {
-    const s = world.state;
-    ctx.clearRect(0, 0, 1280, 800);
-    if (s.screen === 'title') {
-      drawTitle();
-      return;
-    }
-    drawStars();
-    drawTopRight();
-    drawDispatch();
-    drawMissionPanel();
-    drawHealthWeapons();
-    drawRespect();
-    drawSpeedVehicle();
-    drawMinimap();
-    drawDialogue();
-    if (s.screen === 'garage') drawGarage();
-    else if (s.screen === 'paused') drawPaused();
-    else if (s.screen === 'busted') drawBusted();
-    else drawBanner();
-  }
-
-  return { draw, canvas };
-}
+  };
+})();
