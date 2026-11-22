@@ -1,144 +1,138 @@
-// People: the player and the pedestrians. Every person is built from several
-// parts (torso, head, two arms, two legs) with their own colours and
-// proportions, and walks with swinging arms and legs. No single-box people.
-// Pedestrians wander the sidewalks in small groups, flee crimes, and are
-// knocked down when hit. render3d.js builds the part meshes from these bodies.
+// People: multi-part low-poly characters with convincing proportions — head,
+// torso, two arms, two legs, varied heights, skin, hair and outfits, and a
+// walk animation that swings the arms and legs. Nobody is a plain box.
+import { CITY, BOULEVARD_X } from './config.js';
+import { makeRng, range, rangeInt, pick } from './random.js';
 
-import { SHIRTS, PANTS, SKINS } from './config.js';
-import { pick, range } from './random.js';
+const rng = makeRng(4242);
+let personId = 0;
 
-const HAIR = ['#201512', '#3a2a1a', '#6b4a2a', '#111111', '#8a8a8a', '#e8c832'];
+const SKINS = [0xe8b98a, 0xc98d5f, 0x8a5a3b, 0xf2c9a0, 0x6b4426];
+const SHIRTS = [0xd7263d, 0x2e86c8, 0x27a35c, 0xf2c94c, 0x7a5cff, 0xff8a3d, 0x2ee6c8, 0xe87a5d, 0xffffff, 0x333333];
+const PANTS = [0x2a3a55, 0x3a3a3a, 0x5a4a3a, 0x7a8a9a, 0x1a1a1a];
+const HAIRS = [0x1a1a1a, 0x4a2a10, 0x8a8a8a, 0xd9a441, 0x3a1a0a];
 
-let nextId = 1;
+function limbMat(color) { return new THREE.MeshLambertMaterial({ color }); }
 
-/** A body is a bag of parts; render3d builds a mesh group from it. */
-export function makeBody(rng, kind) {
-  const outfit = [pick(rng, SHIRTS), pick(rng, PANTS), pick(rng, SKINS), pick(rng, HAIR)];
-  const tall = range(rng, 0.92, 1.08);
-  const wide = range(rng, 0.9, 1.12);
-  return {
-    kind: kind || 'ped',
-    shirt: outfit[0],
-    pants: outfit[1],
-    skin: outfit[2],
-    hair: outfit[3],
-    tall,
-    wide,
-    hat: rng() < 0.18,
-    walkPhase: range(rng, 0, Math.PI * 2),
-    walkSpeed: range(rng, 1.4, 2.2),
+export function makePersonMesh(opts) {
+  const o = opts || {};
+  const h = o.height || range(rng, 1.65, 1.9);
+  const skin = o.skin || pick(rng, SKINS);
+  const shirt = o.shirt || pick(rng, SHIRTS);
+  const pants = o.pants || pick(rng, PANTS);
+  const hair = o.hair || pick(rng, HAIRS);
+  const g = new THREE.Group();
+  const s = h / 1.75;
+  // Legs.
+  const legGeo = new THREE.BoxGeometry(0.16, 0.8 * s, 0.18);
+  const legL = new THREE.Mesh(legGeo, limbMat(pants)); legL.position.set(-0.11, 0.4 * s, 0);
+  const legR = new THREE.Mesh(legGeo, limbMat(pants)); legR.position.set(0.11, 0.4 * s, 0);
+  g.add(legL); g.add(legR);
+  // Torso (jacket/shirt) with a collar stripe.
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.62 * s, 0.3), limbMat(shirt));
+  torso.position.y = 0.8 * s + 0.31 * s; g.add(torso);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.1, 0.32), limbMat(o.jacketTrim || 0xffffff));
+  chest.position.y = 0.8 * s + 0.52 * s; chest.visible = !!o.jacketTrim; g.add(chest);
+  // Arms.
+  const armGeo = new THREE.BoxGeometry(0.13, 0.62 * s, 0.15);
+  const armL = new THREE.Mesh(armGeo, limbMat(shirt)); armL.position.set(-0.34, 0.8 * s + 0.3 * s, 0);
+  const armR = new THREE.Mesh(armGeo, limbMat(shirt)); armR.position.set(0.34, 0.8 * s + 0.3 * s, 0);
+  g.add(armL); g.add(armR);
+  // Hands.
+  const handGeo = new THREE.BoxGeometry(0.11, 0.12, 0.12);
+  const handL = new THREE.Mesh(handGeo, limbMat(skin)); handL.position.set(-0.34, 0.8 * s - 0.06 * s, 0);
+  const handR = new THREE.Mesh(handGeo, limbMat(skin)); handR.position.set(0.34, 0.8 * s - 0.06 * s, 0);
+  g.add(handL); g.add(handR);
+  // Head + hair + cap option.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 0.3), limbMat(skin));
+  head.position.y = 0.8 * s + 0.62 * s + 0.16; g.add(head);
+  const hairM = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.32), limbMat(hair));
+  hairM.position.y = 0.8 * s + 0.62 * s + 0.34; g.add(hairM);
+  if (o.cap) {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.1, 8), limbMat(o.cap));
+    cap.position.y = 0.8 * s + 0.62 * s + 0.4; g.add(cap);
+  }
+  g.userData.parts = { legL, legR, armL, armR, torso, head };
+  g.userData.height = h;
+  return g;
+}
+
+export function makePerson(scene, x, z, angle, opts) {
+  const mesh = makePersonMesh(opts);
+  mesh.position.set(x, 0, z);
+  mesh.rotation.y = angle;
+  scene.add(mesh);
+  const p = {
+    id: (personId += 1), mesh, x, z, angle,
+    speed: 0, walkPhase: Math.random() * 6.28, fleeing: false,
+    target: null, isPlayer: !!(opts && opts.isPlayer),
   };
+  return p;
 }
 
-/** Rook, the player — tall, red jacket, impossible to miss in a crowd. */
-export function makePlayerBody(rng) {
-  const body = makeBody(rng, 'player');
-  body.shirt = '#e63946';
-  body.pants = '#1f2a44';
-  body.skin = '#e8b98a';
-  body.hair = '#201512';
-  body.tall = 1.06;
-  body.wide = 1.05;
-  body.hat = false;
-  return body;
+export function animateWalk(p, dt, moving) {
+  const parts = p.mesh.userData.parts;
+  if (!moving) {
+    parts.legL.rotation.x *= 0.8; parts.legR.rotation.x *= 0.8;
+    parts.armL.rotation.x *= 0.8; parts.armR.rotation.x *= 0.8;
+    return;
+  }
+  p.walkPhase += dt * (p.speed * 2.4 + 4);
+  const sw = Math.sin(p.walkPhase) * 0.55;
+  parts.legL.rotation.x = sw; parts.legR.rotation.x = -sw;
+  parts.armL.rotation.x = -sw * 0.8; parts.armR.rotation.x = sw * 0.8;
 }
 
-export function createPedestrian(city, rng, x, z) {
-  return {
-    id: nextId++,
-    x,
-    z,
-    heading: range(rng, 0, Math.PI * 2),
-    speed: 0,
-    body: makeBody(rng, 'ped'),
-    state: 'walk',
-    waypoint: sidewalkPoint(city, rng),
-    group: Math.floor(rng() * 6),
-    fleeTimer: 0,
-    downTimer: 0,
-    panic: 0,
-  };
+function sidewalkPoint() {
+  // A point on a sidewalk beside a road, or on the boulevard walk.
+  const lines = [];
+  for (let v = -CITY.half; v <= CITY.half; v += CITY.pitch) lines.push(v);
+  if (rng() < 0.3) return { x: BOULEVARD_X - 12 + range(rng, -1, 1), z: range(rng, -170, 170) };
+  const along = pick(rng, lines);
+  const across = range(rng, -CITY.half, CITY.half);
+  return rng() < 0.5
+    ? { x: along + (rng() < 0.5 ? -7.5 : 7.5), z: across }
+    : { x: across, z: along + (rng() < 0.5 ? -7.5 : 7.5) };
 }
 
-/** A point on a sidewalk: a road point pushed to the side of the street. */
-export function sidewalkPoint(city, rng) {
-  const p = city.randomRoadPoint(rng);
-  const onVertical = Math.abs(p.x % 80) < 1 || Math.abs(Math.abs(p.x) - 240) < 1;
-  if (onVertical) return { x: p.x + (rng() < 0.5 ? -11 : 11), z: p.z };
-  return { x: p.x, z: p.z + (rng() < 0.5 ? -11 : 11) };
-}
-
-/** 20+ pedestrians on the sidewalks, in small groups near each other. */
-export function createCrowd(city, rng, count) {
+export function spawnPedestrians(scene, count) {
   const peds = [];
-  // Groups of 2–4 friends walking together, so the street reads as busy.
-  let made = 0;
-  while (made < count) {
-    const groupSize = 2 + Math.floor(rng() * 3);
-    const anchor = sidewalkPoint(city, rng);
-    for (let i = 0; i < groupSize && made < count; i += 1, made += 1) {
-      const ped = createPedestrian(city, rng, anchor.x + range(rng, -3, 3), anchor.z + range(rng, -3, 3));
-      ped.group = made;
-      peds.push(ped);
-    }
+  for (let i = 0; i < count; i += 1) {
+    const pt = sidewalkPoint();
+    const p = makePerson(scene, pt.x, pt.z, range(rng, 0, Math.PI * 2), {});
+    p.speed = range(rng, 1.2, 2.2);
+    p.target = sidewalkPoint();
+    peds.push(p);
   }
   return peds;
 }
 
-/** Update one pedestrian: walk to the waypoint, flee from danger, get up again. */
-export function updatePedestrian(ped, dt, city, danger) {
-  if (ped.state === 'down') {
-    ped.downTimer -= dt;
-    if (ped.downTimer <= 0) {
-      ped.state = 'walk';
-      ped.fleeTimer = 3;
+export function updatePedestrians(peds, dt, playerPos, wanted) {
+  for (const p of peds) {
+    if (!p.target) p.target = sidewalkPoint();
+    let tx = p.target.x, tz = p.target.z;
+    // Flee from the player when the heat is on.
+    if (wanted > 0 && playerPos) {
+      const d = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
+      if (d < 22) {
+        p.fleeing = true;
+        tx = p.x + (p.x - playerPos.x) / Math.max(1, d) * 30;
+        tz = p.z + (p.z - playerPos.z) / Math.max(1, d) * 30;
+      } else p.fleeing = false;
     }
-    return;
+    const dx = tx - p.x, dz = tz - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1.5) { p.target = sidewalkPoint(); continue; }
+    const sp = p.fleeing ? p.speed * 2.6 : p.speed;
+    const want = Math.atan2(-dz, dx);
+    let diff = want - p.angle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    p.angle += Math.max(-3 * dt, Math.min(3 * dt, diff));
+    p.x += Math.cos(p.angle) * sp * dt;
+    p.z -= Math.sin(p.angle) * sp * dt;
+    p.mesh.position.set(p.x, 0, p.z);
+    p.mesh.rotation.y = p.angle;
+    animateWalk(p, dt, true);
   }
-  if (danger) {
-    const dx = ped.x - danger.x;
-    const dz = ped.z - danger.z;
-    const d = Math.hypot(dx, dz);
-    if (d < 26) {
-      ped.state = 'flee';
-      ped.fleeTimer = 2.5;
-      ped.panic = 1;
-    }
-  }
-  if (ped.state === 'flee') {
-    ped.fleeTimer -= dt;
-    const dx = ped.x - (danger ? danger.x : ped.x);
-    const dz = ped.z - (danger ? danger.z : ped.z);
-    const d = Math.hypot(dx, dz) || 1;
-    ped.heading = Math.atan2(dz, dx);
-    ped.speed = 4.2;
-    ped.x += Math.cos(ped.heading) * ped.speed * dt;
-    ped.z += Math.sin(ped.heading) * ped.speed * dt;
-    if (ped.fleeTimer <= 0) ped.state = 'walk';
-  } else {
-    const dx = ped.waypoint.x - ped.x;
-    const dz = ped.waypoint.z - ped.z;
-    const d = Math.hypot(dx, dz);
-    if (d < 1.5) {
-      ped.waypoint = sidewalkPoint(city, Math.random);
-      ped.speed = 0;
-    } else {
-      ped.heading = Math.atan2(dz, dx);
-      ped.speed = ped.body.walkSpeed;
-      ped.x += Math.cos(ped.heading) * ped.speed * dt;
-      ped.z += Math.sin(ped.heading) * ped.speed * dt;
-    }
-  }
-  ped.body.walkPhase += dt * (ped.speed > 0.1 ? ped.speed * 3.2 : 0);
-  const fixed = city.collide(ped.x, ped.z, 0.6);
-  ped.x = fixed.x;
-  ped.z = fixed.z;
-}
-
-/** Knock a pedestrian down (crime: wanted heat + a scream). */
-export function knockDown(ped) {
-  if (ped.state === 'down') return;
-  ped.state = 'down';
-  ped.downTimer = 3;
-  ped.speed = 0;
 }

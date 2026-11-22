@@ -3,18 +3,197 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:,">
-<title>Vice Shores — a sun-soaked open-world crime game</title>
+<title>Vice Shores — open-world crime</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #ff9a4d; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1a24; font-family: 'Arial Black', Arial, Helvetica, sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* ---------- dense HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; font-family: Arial, Helvetica, sans-serif; z-index: 5; }
+  #hud.dim { opacity: 0.25; }
+  .panel { position: absolute; background: rgba(10, 14, 22, 0.78); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 8px; padding: 8px 10px; }
+  #job-panel { top: 12px; left: 12px; width: 300px; }
+  #job-title { font-weight: 900; font-size: 15px; color: #ffc93c; letter-spacing: 0.5px; }
+  #job-goal { font-size: 12px; margin-top: 3px; line-height: 1.35; }
+  #job-pay { font-size: 11px; color: #9fd8ff; margin-top: 3px; }
+  #dispatch-panel { top: 12px; right: 12px; width: 250px; text-align: right; }
+  #dispatch-panel h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: 1px; color: #ff8a8a; }
+  #dispatch-list div { font-size: 11px; display: flex; justify-content: space-between; gap: 8px; }
+  #dispatch-list b { color: #fff; } #dispatch-list span { color: #ffd76a; } #dispatch-list i { color: #7ee6c8; font-style: normal; }
+  #top-center { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #stars { font-size: 26px; letter-spacing: 2px; color: #555; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+  #stars .on { color: #ffc93c; }
+  #wanted-label { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #ff5a5a; }
+  #money-clock { position: absolute; top: 118px; right: 12px; text-align: right; }
+  #money { font-size: 22px; font-weight: 900; color: #7dff9a; text-shadow: 0 2px 4px rgba(0,0,0,0.7); }
+  #clock { font-size: 12px; color: #dfe9f2; }
+  #radio { position: absolute; top: 168px; right: 12px; text-align: right; font-size: 11px; color: #cfe6ff; }
+  #radio b { color: #ff9ad5; }
+  #vitals { position: absolute; left: 12px; bottom: 12px; width: 240px; }
+  .bar { height: 10px; background: rgba(255,255,255,0.25); border-radius: 5px; overflow: hidden; margin: 2px 0 6px; }
+  .bar i { display: block; height: 100%; }
+  #health-bar { background: #37d67a; } #armor-bar { background: #4da3ff; }
+  #vitals span { font-size: 11px; font-weight: 700; }
+  #minimap-wrap { position: absolute; left: 12px; bottom: 92px; border: 2px solid rgba(255,255,255,0.5); border-radius: 6px; overflow: hidden; background: #0e2a3a; }
+  #minimap { display: block; }
+  #respect { position: absolute; right: 12px; bottom: 150px; width: 210px; text-align: right; }
+  #respect-rank { font-size: 13px; font-weight: 900; color: #ffc93c; }
+  #respect-ladder { font-size: 10px; color: #b9c6d4; letter-spacing: 1px; margin-top: 2px; }
+  #respect-ladder .cur { color: #ffc93c; font-weight: 900; }
+  #respect-ladder em { color: #666; font-style: normal; margin: 0 2px; }
+  #weapons { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; }
+  .wslot { background: rgba(10,14,22,0.78); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 6px 8px; font-size: 11px; }
+  .wslot b { color: #ffc93c; margin-right: 4px; }
+  .wslot.sel { border-color: #ffc93c; background: rgba(60,40,0,0.85); }
+  .wslot span { color: #9fd8ff; }
+  #vehicle { position: absolute; right: 12px; bottom: 64px; text-align: right; }
+  #vehicle-name { font-size: 13px; font-weight: 900; }
+  #vehicle-cond { font-size: 11px; color: #cfe6ff; }
+  #speed { font-size: 24px; font-weight: 900; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.7); }
+  #crew { position: absolute; left: 50%; transform: translateX(-50%); bottom: 12px; display: flex; gap: 6px; }
+  .crew { background: rgba(10,14,22,0.78); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 5px 8px; font-size: 10px; text-align: center; }
+  .crew b { color: #ffc93c; } .crew i { display: block; font-style: normal; color: #9fd8ff; font-size: 9px; }
+  #dialogue { position: absolute; left: 50%; transform: translateX(-50%); bottom: 86px; max-width: 640px; background: rgba(10,14,22,0.82); border-left: 4px solid #ffc93c; border-radius: 4px; padding: 8px 12px; font-size: 13px; line-height: 1.4; transition: opacity 0.4s; }
+  /* ---------- title screen (poster) ---------- */
+  .overlay { position: fixed; inset: 0; display: none; z-index: 10; pointer-events: auto; }
+  .overlay.show { display: block; }
+  #title-screen { background: linear-gradient(180deg, rgba(10,16,26,0.10) 0%, rgba(10,16,26,0.05) 45%, rgba(10,16,26,0.35) 100%); }
+  #poster { position: absolute; top: 2%; left: 50%; transform: translateX(-50%); width: min(1060px, 94vw); text-align: center; }
+  #poster svg { width: 100%; height: auto; display: block; }
+  #title-sub { color: #2ee6c8; font-weight: 900; font-size: 20px; letter-spacing: 6px; text-shadow: 0 2px 0 #062a26, 0 4px 10px rgba(0,0,0,0.6); margin-top: -6px; }
+  #title-tag { color: #fff; font-size: 13px; letter-spacing: 3px; margin-top: 6px; text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+  #title-story { position: absolute; top: 34%; left: 5%; width: 300px; color: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+  #menu { position: absolute; top: 44%; left: 5%; display: flex; flex-direction: column; gap: 4px; }
+  #menu button { background: none; border: none; color: #fff; font-family: 'Arial Black', Arial, sans-serif; font-size: 30px; font-weight: 900; text-align: left; letter-spacing: 1px; cursor: pointer; padding: 2px 10px; text-shadow: 0 3px 0 rgba(0,0,0,0.55), 0 6px 14px rgba(0,0,0,0.7); }
+  #menu button:hover, #menu button.sel { color: #ffc93c; }
+  #menu button.sel::before { content: '▶ '; color: #ffc93c; }
+  #save-slots { position: absolute; top: 40%; right: 4%; width: 380px; display: flex; flex-direction: column; gap: 8px; }
+  .slot { background: rgba(10,14,22,0.82); border: 1px solid rgba(255,255,255,0.35); border-radius: 8px; padding: 10px 12px; color: #fff; font-family: Arial, Helvetica, sans-serif; }
+  .slot b { font-size: 13px; color: #ffc93c; display: block; }
+  .slot span { font-size: 11px; color: #dfe9f2; display: block; margin-top: 2px; }
+  .slot i { font-size: 11px; color: #7ee6c8; font-style: normal; }
+  .slot.empty { opacity: 0.75; }
+  #controls-line { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 12px; letter-spacing: 1px; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+  /* ---------- garage / pause / busted ---------- */
+  #garage-screen { background: rgba(8, 12, 18, 0.45); }
+  #garage-panel { position: absolute; left: 4%; top: 12%; width: 340px; background: rgba(10,14,22,0.88); border: 1px solid rgba(255,255,255,0.3); border-radius: 10px; padding: 16px; color: #fff; font-family: Arial, Helvetica, sans-serif; }
+  #garage-panel h2 { margin: 0 0 4px; color: #ff8a3d; font-size: 20px; font-family: 'Arial Black', Arial, sans-serif; }
+  #garage-panel p { font-size: 12px; color: #cfe6ff; margin: 4px 0 10px; }
+  .shop-item { display: flex; justify-content: space-between; font-size: 13px; padding: 7px 4px; border-top: 1px solid rgba(255,255,255,0.15); }
+  .shop-item b { color: #7dff9a; }
+  #garage-panel button { margin-top: 12px; background: #ffc93c; border: none; border-radius: 6px; padding: 10px 16px; font-weight: 900; font-size: 13px; cursor: pointer; }
+  #pause-screen, #busted-screen { background: rgba(8, 12, 18, 0.72); color: #fff; text-align: center; font-family: Arial, Helvetica, sans-serif; }
+  #pause-screen h1, #busted-screen h1 { margin-top: 22vh; font-family: 'Arial Black', Arial, sans-serif; font-size: 44px; letter-spacing: 2px; }
+  #pause-screen p, #busted-screen p { font-size: 14px; color: #cfe6ff; }
+  #busted-screen button { background: #ffc93c; border: none; border-radius: 6px; padding: 12px 22px; font-weight: 900; font-size: 15px; cursor: pointer; margin-top: 12px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Vice Shores: a 3D open-world crime game. Drive, steal cars, outrun the police, and run eight jobs for the fixer Marla."></canvas>
+<canvas id="game" aria-label="Vice Shores: open-world crime game"></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="job-panel" class="panel">
+    <div id="job-title">JOB 1/8 — FIRST GEAR</div>
+    <div id="job-goal">Drive to the pier and collect the package</div>
+    <div id="job-pay">PAYOUT $250 · ACT I — THE NEW DRIVER · Kumala Strand</div>
+  </div>
+  <div id="dispatch-panel" class="panel">
+    <h3>VSPD DISPATCH — POLICE</h3>
+    <div id="dispatch-list"></div>
+  </div>
+  <div id="top-center">
+    <div id="stars"></div>
+    <div id="wanted-label">CLEAN</div>
+  </div>
+  <div id="money-clock">
+    <div id="money">$500</div>
+    <div id="clock">18:23 · SUNDAY</div>
+  </div>
+  <div id="radio"><b id="radio-station">SHORE FM 98.6</b><br><span id="radio-song">Neon Tide — Palm Static</span></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas></div>
+  <div id="vitals">
+    <span id="health-val">HEALTH 100</span>
+    <div class="bar"><i id="health-bar" style="width:100%"></i></div>
+    <span id="armor-val">ARMOR 60</span>
+    <div class="bar"><i id="armor-bar" style="width:60%"></i></div>
+  </div>
+  <div id="respect">
+    <div id="respect-rank">NOBODY · 0%</div>
+    <div class="bar"><i id="respect-bar" style="width:0%"></i></div>
+    <div id="respect-ladder"></div>
+  </div>
+  <div id="vehicle">
+    <div id="vehicle-name">ON FOOT — ROOK</div>
+    <div id="vehicle-cond">Find a car — press E near one</div>
+    <div id="speed">0 km/h</div>
+  </div>
+  <div id="weapons"></div>
+  <div id="crew"></div>
+  <div id="dialogue"></div>
+</div>
+
+<div id="title-screen" class="overlay">
+  <div id="poster">
+    <svg viewBox="0 0 1060 210" role="img" aria-label="VICE SHORES">
+      <defs>
+        <linearGradient id="titleGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffe95e"/>
+          <stop offset="0.45" stop-color="#ffb01e"/>
+          <stop offset="0.75" stop-color="#ff6b1a"/>
+          <stop offset="1" stop-color="#e63b2e"/>
+        </linearGradient>
+        <filter id="titleShadow" x="-20%" y="-20%" width="140%" height="160%">
+          <feDropShadow dx="0" dy="10" stdDeviation="6" flood-color="#000000" flood-opacity="0.75"/>
+        </filter>
+      </defs>
+      <!-- 3D extrusion: dark copies stacked below-right -->
+      <text x="534" y="158" text-anchor="middle" font-family="'Arial Black', Arial, sans-serif" font-size="118" font-weight="900" letter-spacing="2" fill="#7a1408">VICE SHORES</text>
+      <text x="532" y="156" text-anchor="middle" font-family="'Arial Black', Arial, sans-serif" font-size="118" font-weight="900" letter-spacing="2" fill="#a31d0b">VICE SHORES</text>
+      <!-- Main face: vivid sunset gradient, thick dark outline, glossy top -->
+      <text x="530" y="152" text-anchor="middle" font-family="'Arial Black', Arial, sans-serif" font-size="118" font-weight="900" letter-spacing="2" fill="url(#titleGrad)" stroke="#1a0d00" stroke-width="7" stroke-linejoin="round" paint-order="stroke" filter="url(#titleShadow)">VICE SHORES</text>
+      <text x="530" y="152" text-anchor="middle" font-family="'Arial Black', Arial, sans-serif" font-size="118" font-weight="900" letter-spacing="2" fill="#ffffff" opacity="0.22">VICE SHORES</text>
+      <text x="530" y="196" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="900" letter-spacing="10" fill="#2ee6c8">ISLE OF EMBERS</text>
+    </svg>
+    <div id="title-sub">A SUN-SOAKED CITY OF YOUR OWN</div>
+    <div id="title-tag">EIGHT JOBS · FIVE STARS · ONE GOLDEN HOUR</div>
+  </div>
+  <div id="title-story">Rook is new in town. The fixer Marla has eight jobs and a fast car — take the wheel, outrun the law, and become the king of the shore.</div>
+  <div id="menu">
+    <button class="sel" data-act="continue">CONTINUE</button>
+    <button data-act="new">NEW GAME</button>
+    <button data-act="load">LOAD GAME</button>
+    <button data-act="settings">SETTINGS</button>
+  </div>
+  <div id="save-slots"></div>
+  <div id="controls-line">WASD drive / walk · E enter &amp; steal · SPACE shoot · SHIFT sneak · C camera · M radio · P pause · G garage</div>
+</div>
+
+<div id="garage-screen" class="overlay">
+  <div id="garage-panel">
+    <h2>DOCKSIDE CUSTOMS</h2>
+    <p>Airbrush workshop — your GT is on the lift, mid-paint.</p>
+    <p>Car: <b>Rukun Pelo GT</b> · <span id="garage-cond">CONDITION 72%</span> · <span id="garage-money">$12,650</span></p>
+    <div class="shop-item"><span>Full repair — back to 100%</span><b>$250</b></div>
+    <div class="shop-item"><span>Respray — sunrise orange airbrush</span><b>$150</b></div>
+    <div class="shop-item"><span>Armour plating +40</span><b>$400</b></div>
+    <div class="shop-item"><span>Ammo — pistol + SMG refill</span><b>$180</b></div>
+    <div class="shop-item"><span>Nitro tune — faster top speed</span><b>$600</b></div>
+    <button id="garage-back">BACK TO THE CITY</button>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay">
+  <h1>PAUSED</h1>
+  <p>Press P to keep playing. The city waits for no one — except right now.</p>
+</div>
+
+<div id="busted-screen" class="overlay">
+  <h1>BUSTED</h1>
+  <p id="busted-fine">BAIL $150 — the VSPD took your cash and dropped you at the safehouse.</p>
+  <button id="busted-continue">WALK OUT — CONTINUE</button>
+</div>
+
 <script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>

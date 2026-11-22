@@ -1,170 +1,104 @@
-// Every tuning number, colour and piece of content in one place, so the rest of
-// the game reads its numbers from here instead of hiding them in the logic.
-// The look is a BRIGHT golden hour: a low warm sun, a warm orange-to-blue sky,
-// saturated paint on everything, a bright blue ocean and a wide beachfront.
-
-/** The simulation's fixed step, in seconds: 60 updates a second. */
+// Every tuning number, colour and story fact in one place. Vice Shores is a
+// sun-soaked coastal city: a street grid west of a wide beachfront boulevard,
+// the beach and the ocean east of it, a pier and a marina in the south-east.
+// X runs west(-) to east(+), Z runs north(-) to south(+). Roads are 12 wide,
+// blocks are 40 across, so the road centrelines sit on multiples of 52.
 export const STEP = 1 / 60;
+export const CITY = { half: 182, road: 12, block: 40, pitch: 52 };
+export const BOULEVARD_X = 156;      // beachfront boulevard centreline
+export const BEACH_X = 178;          // sand starts here
+export const OCEAN_X = 196;          // water starts here
+export const PIER_Z = 120;           // pier runs east from the boulevard
+export const GARAGE = { x: 104, z: 104, name: 'Dockside Customs' };
+export const SAFEHOUSE = { x: -104, z: -104, name: "Rook's Loft" };
 
-/** The city grid. Streets run on an 80-unit pitch; blocks sit between them. */
-export const GRID = {
-  pitch: 80,
-  roadHalf: 7,
-  blockHalf: 33,
-  half: 320,
-  boulevardX: 240,
-  beachX: 284,
-  oceanX: 336,
-  riverZ: -288,
-};
-
-/** Bright golden-hour palette. Nothing grey, nothing muted on purpose. */
 export const PALETTE = {
-  skyTop: '#5fb4f0',
-  skyMid: '#ff9e66',
-  skyHorizon: '#ffd27d',
-  sun: '#fff3c4',
-  fog: '#ffd9a8',
-  ocean: '#1fa8e0',
-  oceanDeep: '#0f7fc4',
-  sand: '#f4d9a0',
-  road: '#41454f',
-  roadLine: '#ffd94d',
-  sidewalk: '#cfc3a8',
-  ground: '#b9c4a8',
-  building: ['#ffd9a0', '#ffb3a7', '#a8d8ff', '#ffe08a', '#c9f2c7', '#f2b8d8', '#ffc46b', '#e8e8e8', '#ffb27d', '#b8e6d5'],
-  neon: ['#ff2e88', '#00e5ff', '#ffe600', '#7cff00', '#ff7a00'],
-  palmTrunk: '#8a5a2b',
-  palmLeaf: '#37b24d',
-  palmLeaf2: '#69c24a',
-  playerJacket: '#e63329',
+  sun: 0xffd9a0, sunSky: 0xffe9c4, skyTop: 0x7fb8e8, skyHorizon: 0xffc98a,
+  ocean: 0x1e9fc4, sand: 0xf2d8a0, asphalt: 0x3a3f4a, sidewalk: 0xc9bda6,
+  building: [0xf5e6c8, 0xe8a56b, 0x7fc4b8, 0xe87a5d, 0xf2c94c, 0x9db8d6, 0xd98a7a, 0x8fc7a3],
+  neon: [0xff4d6d, 0x2ee6c8, 0xffc93c, 0x7a5cff, 0xff8a3d],
+  playerJacket: 0xd7263d, policeWhite: 0xf2f2f2, policeBlue: 0x1d4ed8,
+  taxiYellow: 0xf7c948, sportsOrange: 0xff6b1a, heliWhite: 0xf5f5f0, heliRed: 0xc22730,
 };
 
-/** The eight jobs Rook runs for the fixer Marla. */
 export const JOBS = [
-  {
-    id: 'first-wheels', act: 'ACT I', name: 'FIRST WHEELS', payout: 250,
-    dialogue: 'Marla: "New in town, Rook? Steal a car and bring it to Coral Row. Don\'t scratch it."',
-    stages: [
-      { type: 'steal', text: 'Steal any car', target: 'anyCar' },
-      { type: 'goto', text: 'Drive to Coral Row', target: 'coralRow' },
-    ],
-  },
-  {
-    id: 'package-run', act: 'ACT I', name: 'PACKAGE RUN', payout: 400,
-    dialogue: 'Marla: "A package is waiting in Palm Park. The pier, quick — and the cops are already watching."',
-    stages: [
-      { type: 'goto', text: 'Grab the package in Palm Park', target: 'palmPark' },
-      { type: 'goto', text: 'Deliver it to the pier', target: 'pier' },
-    ],
-  },
-  {
-    id: 'cash-drop', act: 'ACT I', name: 'CASH DROP', payout: 600,
-    dialogue: 'Marla: "Shore Bank left a drop for us. Pick it up, bring it home. Quietly."',
-    stages: [
-      { type: 'goto', text: 'Pick up the drop at Shore Bank', target: 'bank' },
-      { type: 'goto', text: 'Deliver it to the safehouse', target: 'safehouse' },
-    ],
-  },
-  {
-    id: 'turbo-boost', act: 'ACT II', name: 'TURBO BOOST', payout: 800,
-    dialogue: 'Marla: "Three checkpoints, ninety seconds. Show this city what that engine can do."',
-    stages: [
-      { type: 'race', text: 'Hit all 3 checkpoints in 90s', target: 'race', seconds: 90 },
-    ],
-  },
-  {
-    id: 'repo-job', act: 'ACT II', name: 'REPO JOB', payout: 900,
-    dialogue: 'Marla: "A Rukun Pelo GT is parked at Dockside Customs. It\'s ours now. Bring it in."',
-    stages: [
-      { type: 'goto', text: 'Get the Rukun Pelo GT', target: 'garage' },
-      { type: 'goto', text: 'Deliver the GT to Dockside Customs', target: 'garage' },
-    ],
-  },
-  {
-    id: 'heat-wave', act: 'ACT II', name: 'HEAT WAVE', payout: 1200,
-    dialogue: 'Marla: "Five stars, Rook. Sixty seconds. Make them remember you."',
-    stages: [
-      { type: 'survive', text: 'Survive 60 seconds at 4 stars or more', target: 'survive', seconds: 60, stars: 4 },
-    ],
-  },
-  {
-    id: 'shore-bank-vault', act: 'ACT III', name: 'SHORE BANK VAULT', payout: 1500,
-    dialogue: 'Marla: "The vault, Rook. Grab the cash and lose the heat at the safehouse."',
-    stages: [
-      { type: 'goto', text: 'Grab the vault cash at Shore Bank', target: 'bank' },
-      { type: 'goto', text: 'Escape the chase to the safehouse', target: 'safehouse' },
-    ],
-  },
-  {
-    id: 'king-of-vice-shores', act: 'ACT III', name: 'KING OF VICE SHORES', payout: 1500,
-    dialogue: 'Marla: "Last one. Five stars, sixty seconds, then the pier. Own this city."',
-    stages: [
-      { type: 'survive', text: 'Survive 60 seconds at 5 stars', target: 'survive', seconds: 60, stars: 5 },
-      { type: 'goto', text: 'Reach the pier', target: 'pier' },
-    ],
-  },
+  { id: 1, name: 'FIRST GEAR', act: 'ACT I — THE NEW DRIVER', place: 'Kumala Strand', pay: 250,
+    goal: 'Drive to the pier and collect the package', line: 'New in town, Rook? One package, one pier. Do not make me regret this.' },
+  { id: 2, name: 'PACKAGE RUN', act: 'ACT I — THE NEW DRIVER', place: 'Palm Row', pay: 350,
+    goal: 'Steal the Sunline Cab and deliver it to Palm Row', line: 'That cab on Palm Row is yours, Rook. Take it — the driver already knows the drill.' },
+  { id: 3, name: 'LOSE THE HEAT', act: 'ACT I — THE NEW DRIVER', place: 'Neon Row', pay: 400,
+    goal: 'Lose a 3-star wanted level', line: 'Three stars, Rook. Shake them off and meet me at Neon Row.' },
+  { id: 4, name: 'CASH DROP', act: 'ACT II — MARKET SQUEEZE', place: 'Kumala Strand', pay: 600,
+    goal: 'Pick up the cash at the market and bring it to the safehouse', line: 'The market stall has an envelope with your name on it. Bring it home.' },
+  { id: 5, name: 'TIMED RACE', act: 'ACT II — MARKET SQUEEZE', place: 'Sunset Boulevard', pay: 800,
+    goal: 'Reach the marina in 90 seconds', line: 'Ninety seconds to the marina, Rook. The GT can do it. Can you?' },
+  { id: 6, name: 'REPO JOB', act: 'ACT II — MARKET SQUEEZE', place: 'Dockside Customs', pay: 900,
+    goal: 'Deliver the GT to Dockside Customs', line: 'Take the GT to the shop. It needs a new coat before the buyer sees it.' },
+  { id: 7, name: 'HEAT WAVE', act: 'ACT II — MARKET SQUEEZE', place: 'Sunset Boulevard', pay: 1200,
+    goal: 'Survive 60 seconds at 4 stars or more', line: 'Five stars, Rook — and the whole city is watching the boulevard. Do not slow down.' },
+  { id: 8, name: 'THE SHORE BANK', act: 'ACT III — THE BIG ONE', place: 'Shore Bank', pay: 1500,
+    goal: 'Hit the Shore Bank vault and escape to the pier', line: 'The vault, Rook. One job, one vault, and we never work again. Go.' },
 ];
 
-/** Respect ladder: name and the RP it starts at. */
-export const RANKS = [
-  { name: 'NOBODY', rp: 0 },
-  { name: 'HUSTLER', rp: 500 },
-  { name: 'WHEELMAN', rp: 1500 },
-  { name: 'FIXER', rp: 3000 },
-  { name: 'BOSS', rp: 5200 },
-];
-
-/** The crew and what each of them does for Rook. */
 export const CREW = [
-  { key: 'Q', name: 'MIRA', ability: 'SWAP PLATES', desc: 'Lose 1 wanted star', cooldown: 45 },
-  { key: 'C', name: 'JAI', ability: 'QUICK FIX', desc: 'Repair the car +35%', cooldown: 30 },
-  { key: 'V', name: 'KIRI', ability: 'EYES OUT', desc: 'Police lose you for 20s', cooldown: 60 },
+  { key: 'Q', name: 'MIRA', ability: 'SWAP PLATES', desc: 'Lose 1 wanted star' },
+  { key: 'C', name: 'JAI', ability: 'QUICK FIX', desc: 'Repair the car +35%' },
+  { key: 'V', name: 'KIRI', ability: 'EYES OUT', desc: 'Police lose you for 20s' },
 ];
 
-/** Radio stations and the songs they play. */
+export const RANKS = ['NOBODY', 'HUSTLER', 'WHEELMAN', 'FIXER', 'BOSS'];
+export const RANK_RP = [0, 600, 1800, 3600, 6500];
+
 export const RADIO = [
   { station: 'SHORE FM 98.6', song: 'Neon Tide — Palm Static' },
-  { station: 'VICE FM 101.1', song: 'Sunset Drive — Coral Reef' },
-  { station: 'PALM 94.2', song: 'Golden Hour — The Breakers' },
+  { station: 'VICE WAVE 101.2', song: 'Sunset Drive — The Palms' },
+  { station: 'BOULEVARD 88.4', song: 'Golden Hour — Marla Ray' },
 ];
 
-/** What Dockside Customs sells. */
-export const GARAGE = [
-  { id: 'repair', name: 'FULL REPAIR', price: 150, desc: 'Condition back to 100%' },
-  { id: 'respray', name: 'RESPRAY', price: 200, desc: 'Fresh paint, any colour' },
-  { id: 'armour', name: 'ARMOUR +50', price: 300, desc: 'Plating that eats bullets' },
-  { id: 'ammo', name: 'AMMO +24', price: 50, desc: 'A box of rounds' },
-  { id: 'nitro', name: 'NITRO KIT', price: 400, desc: 'SHIFT for a boost' },
-  { id: 'tires', name: 'GRIP TIRES', price: 250, desc: 'Corner like it is on rails' },
-  { id: 'engine', name: 'TUNED ENGINE', price: 600, desc: '+15 km/h top speed' },
-  { id: 'tint', name: 'DARK TINT', price: 120, desc: 'Cops see less of you' },
-];
-
-/** The four weapon slots. */
 export const WEAPONS = [
-  { name: 'FISTS', ammo: Infinity, damage: 12, rate: 0.35, range: 2.2, auto: false },
-  { name: 'P9 PISTOL', ammo: 36, damage: 22, rate: 0.28, range: 46, auto: false },
-  { name: 'SMG', ammo: 90, damage: 13, rate: 0.09, range: 40, auto: true },
-  { name: 'SHOTGUN', ammo: 24, damage: 55, rate: 0.8, range: 22, auto: false },
+  { name: 'FISTS', ammo: Infinity, max: Infinity },
+  { name: 'P9 PISTOL', ammo: 36, max: 60 },
+  { name: 'SMG', ammo: 90, max: 120 },
+  { name: 'SHOTGUN', ammo: 12, max: 24 },
 ];
 
-/** Where the three save slots live in this browser. */
-export const SAVE_KEY = 'vice-shores.saves';
+export const SAVE_KEY = 'vice-shores.save.v1';
 
-/** Bright car paint, so the traffic reads as colourful, not grey. */
-export const CAR_PAINTS = ['#ff5a3c', '#ffb020', '#2ec4ff', '#ff8fd1', '#7be07b', '#c77dff', '#ffdf3c', '#4dd0c4', '#f4f4f4', '#ff9e57'];
+// One shared mutable state object; every module imports it.
+export const S = {
+  mode: 'title',            // title | play | garage | paused | busted
+  time: 18 * 3600 + 23 * 60, // seconds since midnight (18:23)
+  clock: 0,                 // seconds the game has run
+  money: 500,
+  respect: 0,
+  jobIndex: 0,              // 0-based, JOBS[jobIndex] is current
+  jobDone: false,
+  jobTimer: 0,
+  heatTimer: 0,
+  wanted: 0,
+  wantedHeat: 0,            // 0..1, builds while committing crimes
+  health: 100,
+  armor: 60,
+  weapon: 1,
+  busted: false,
+  muted: false,
+  inCar: false,
+  car: null,                // the player's car (vehicles.js object)
+  player: null,             // the player person (people.js object)
+  traffic: [],
+  peds: [],
+  police: [],
+  heli: null,
+  roadblocks: [],
+  marker: null,             // {x, z, label} current mission target
+  dialogue: '',
+  dialogueTimer: 0,
+  shot: null,               // 'chase' | 'onfoot' | 'title' | 'garage' | null
+  ready: false,
+};
 
-/** Pedestrian shirt and trouser colours, varied per person. */
-export const SHIRTS = ['#e63329', '#2ec4ff', '#ffb020', '#7be07b', '#ff8fd1', '#c77dff', '#f4f4f4', '#4dd0c4', '#ff9e57', '#3a6fd8'];
-export const PANTS = ['#2b2f38', '#3a4a6b', '#5b3a2b', '#274b34', '#6b3a5b', '#37424e'];
-export const SKINS = ['#f2c9a0', '#d9a066', '#a9713f', '#8a5a2b', '#f7d7b5'];
-
-/** Neon signs that hang on the buildings. */
-export const SIGNS = ['HOTEL', 'CASINO', 'ARCADE', 'PIZZA', 'NEON', 'BAR', 'TACOS', 'SURF', 'MOTEL', 'DISCO'];
-
-/** Street and place names the HUD and the save slots quote. */
-export const PLACES = ['Kumala Strand', 'Coral Row', 'Palm Park', 'Dockside Customs', 'Shore Bank', 'Marina Row', 'Sunset Pier', 'Neon Mile'];
-
-/** The font stack for the HUD and the title. */
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+export function rankFor(rp) {
+  let r = 0;
+  for (let i = 0; i < RANK_RP.length; i += 1) if (rp >= RANK_RP[i]) r = i;
+  return r;
+}
