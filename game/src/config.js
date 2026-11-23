@@ -1,30 +1,75 @@
-// Vice Shores — every tuning number, colour and mission in one place.
-// The city is a ~420x420 m grid: streets on the axes, beach + ocean to the east
-// and south, a pier and marina on the south-east shore. Times are 24 h clock.
+// config.js — every tuning number, colour and mission in one place. The city
+// is a ~420x420 m grid: streets on the axes, beach + ocean to the east and
+// south, a pier and marina on the south-east shore. Times are 24 h clock.
 export const STEP = 1 / 60;
 export const SAVE_KEY = 'vice-shores.saves.v1';
 export const BEST_KEY = 'vice-shores.best.v1';
 
 export const WORLD = {
-  half: 210, // city extends -210..210 on x and z
-  block: 44, // block size
-  street: 16, // street width
-  beachX: 176, // sand starts here, ocean beyond x=210
-  pierZ: 150, // pier runs south from z=150 into the sea
+  half: 210,
+  block: 44,
+  street: 16,
+  beachX: 176,
+  pierZ: 150,
 };
 
 // Time-of-day presets used by the screenshot scenes (and the in-game clock).
 export const TOD = {
-  golden: { hour: 17.5, sun: 0xffb36b, sunI: 2.6, hemiI: 0.95, fog: 0xf2a35e, skyTop: 0x2e4a8f, skyMid: 0xe87a4a, skyBot: 0xffb36b },
-  sunset: { hour: 18.8, sun: 0xff8f4d, sunI: 2.2, hemiI: 1.0, fog: 0xe8795a, skyTop: 0x4a5a7a, skyMid: 0xd9553f, skyBot: 0xff9a3d },
-  afternoon: { hour: 16.0, sun: 0xffd9a0, sunI: 2.8, hemiI: 0.68, fog: 0xf0c98f, skyTop: 0x4a7fc1, skyMid: 0xf2b06a, skyBot: 0xffd9a0 },
-  night: { hour: 20.5, sun: 0xc9d6ea, sunI: 0.55, hemiI: 1.0, fog: 0x26262c, skyTop: 0x2a3450, skyMid: 0x3a4a6a, skyBot: 0x5a3040 },
+  golden: {
+    hour: 17.5,
+    sun: 0xffb36b,
+    sunI: 2.6,
+    hemiI: 0.95,
+    fog: 0xf2a35e,
+    skyTop: 0x2e4a8f,
+    skyMid: 0xe87a4a,
+    skyBot: 0xffb36b,
+  },
+  sunset: {
+    hour: 18.8,
+    sun: 0xff8f4d,
+    sunI: 2.2,
+    hemiI: 1.0,
+    fog: 0xe8795a,
+    skyTop: 0x4a5a7a,
+    skyMid: 0xd9553f,
+    skyBot: 0xff9a3d,
+  },
+  afternoon: {
+    hour: 16.0,
+    sun: 0xffd9a0,
+    sunI: 2.8,
+    hemiI: 0.68,
+    fog: 0xf0c98f,
+    skyTop: 0x4a7fc1,
+    skyMid: 0xf2b06a,
+    skyBot: 0xffd9a0,
+  },
+  night: {
+    hour: 20.5,
+    sun: 0xc9d6ea,
+    sunI: 0.55,
+    hemiI: 1.0,
+    fog: 0x26262c,
+    skyTop: 0x2a3450,
+    skyMid: 0x3a4a6a,
+    skyBot: 0x5a3040,
+  },
 };
 
-export const PLAYER = { walkSpeed: 6, runSpeed: 10, accel: 26, brake: 42, maxSpeed: 46, turn: 2.1, health: 100, armour: 100 };
+export const PLAYER = {
+  walkSpeed: 6,
+  runSpeed: 10,
+  accel: 26,
+  brake: 42,
+  maxSpeed: 46,
+  turn: 2.1,
+  health: 100,
+  armour: 100,
+};
 
 export const RANKS = ['NOBODY', 'HUSTLER', 'WHEELMAN', 'FIXER', 'TIDE BOSS'];
-export const RANK_AT = [0, 2, 4, 6, 8]; // missions completed needed
+export const RANK_AT = [0, 2, 4, 6, 8];
 
 export const CREW = [
   { name: 'Marla', role: 'Fixer', ability: 'Hot tip', key: '1' },
@@ -51,8 +96,13 @@ export const MISSIONS = [
 ];
 
 export const PALETTE = {
-  asphalt: 0x44474d, asphaltLine: 0xd8c25a, sidewalk: 0xb9b4a8, sand: 0xe8cf9a,
-  sea: 0x1d6f9a, seaDeep: 0x0f3d5c, grass: 0x4d7a3a,
+  asphalt: 0x44474d,
+  asphaltLine: 0xd8c25a,
+  sidewalk: 0xb9b4a8,
+  sand: 0xe8cf9a,
+  sea: 0x1d6f9a,
+  seaDeep: 0x0f3d5c,
+  grass: 0x4d7a3a,
 };
 
 export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';

@@ -1,9 +1,9 @@
 // render/sky.js — sky dome shader (horizon orange -> pink -> deep blue, sun disc
 // with glow, soft cloud sprites), fog matched to the horizon, and a PMREM
 // environment map built from the sky so paint and glass reflect it.
-export function createSky(scene) {
-  const skyGeo = new THREE.SphereGeometry(900, 32, 16);
-  const skyMat = new THREE.ShaderMaterial({
+export function createSky(scn) {
+  const domeGeo = new THREE.SphereGeometry(900, 32, 16);
+  const domeMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
@@ -27,55 +27,57 @@ export function createSky(scene) {
       '}',
     ].join('\n'),
   });
-  const dome = new THREE.Mesh(skyGeo, skyMat);
-  scene.add(dome);
+  const dome = new THREE.Mesh(domeGeo, domeMat);
+  scn.add(dome);
 
   // A few soft cloud sprites drifting high up (radial-gradient texture so they are soft blobs, not squares).
   const clouds = [];
-  const cloudCanvas = document.createElement('canvas');
-  cloudCanvas.width = 256; cloudCanvas.height = 128;
-  const cg = cloudCanvas.getContext('2d');
-  const cgrad = cg.createRadialGradient(128, 64, 8, 128, 64, 120);
-  cgrad.addColorStop(0, 'rgba(255,255,255,1)');
-  cgrad.addColorStop(0.6, 'rgba(255,255,255,0.55)');
-  cgrad.addColorStop(1, 'rgba(255,255,255,0)');
-  cg.fillStyle = cgrad; cg.fillRect(0, 0, 256, 128);
-  const cloudTex = new THREE.CanvasTexture(cloudCanvas);
-  const cloudMat = new THREE.SpriteMaterial({ color: 0xffd9c0, map: cloudTex, transparent: true, opacity: 0.32, depthWrite: false });
+  const cv = document.createElement('canvas');
+  cv.width = 256;
+  cv.height = 128;
+  const g2 = cv.getContext('2d');
+  const grad = g2.createRadialGradient(128, 64, 8, 128, 64, 120);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g2.fillStyle = grad;
+  g2.fillRect(0, 0, 256, 128);
+  const tex = new THREE.CanvasTexture(cv);
+  const mat = new THREE.SpriteMaterial({ color: 0xffd9c0, map: tex, transparent: true, opacity: 0.32, depthWrite: false });
   for (let i = 0; i < 9; i += 1) {
-    const s = new THREE.Sprite(cloudMat.clone());
-    s.material.opacity = 0.32 + ((i * 37) % 10) / 50;
-    const a = (i / 9) * Math.PI * 2;
-    s.position.set(Math.cos(a) * (300 + (i % 3) * 120), 95 + (i % 4) * 16, Math.sin(a) * (300 + (i % 3) * 100));
-    s.scale.set(140 + (i % 3) * 50, 22 + (i % 2) * 8, 1);
-    scene.add(s);
-    clouds.push(s);
+    const spr = new THREE.Sprite(mat.clone());
+    spr.material.opacity = 0.32 + ((i * 37) % 10) / 50;
+    const ang = (i / 9) * Math.PI * 2;
+    spr.position.set(Math.cos(ang) * (300 + (i % 3) * 120), 95 + (i % 4) * 16, Math.sin(ang) * (300 + (i % 3) * 100));
+    spr.scale.set(140 + (i % 3) * 50, 22 + (i % 2) * 8, 1);
+    scn.add(spr);
+    clouds.push(spr);
   }
 
-  const fog = new THREE.Fog(0xf2a35e, 90, 620);
-  scene.fog = fog;
+  const haze = new THREE.Fog(0xf2a35e, 90, 620);
+  scn.fog = haze;
 
-  let pmrem = null;
-  function applyTime(tod, sunDir) {
-    skyMat.uniforms.top.value.setHex(tod.skyTop);
-    skyMat.uniforms.mid.value.setHex(tod.skyMid);
-    skyMat.uniforms.bot.value.setHex(tod.skyBot);
-    skyMat.uniforms.sunDir.value.copy(sunDir).normalize();
-    skyMat.uniforms.sunCol.value.setHex(tod.sun);
-    fog.color.setHex(tod.fog);
-    fog.near = tod.hour >= 20 ? 60 : 90;
-    fog.far = tod.hour >= 20 ? 420 : 620;
-    for (const c of clouds) c.material.opacity = tod.hour >= 20 ? 0.12 : 0.3;
+  let pm = null;
+  function applyTime(when, sunDir) {
+    domeMat.uniforms.top.value.setHex(when.skyTop);
+    domeMat.uniforms.mid.value.setHex(when.skyMid);
+    domeMat.uniforms.bot.value.setHex(when.skyBot);
+    domeMat.uniforms.sunDir.value.copy(sunDir).normalize();
+    domeMat.uniforms.sunCol.value.setHex(when.sun);
+    haze.color.setHex(when.fog);
+    haze.near = when.hour >= 20 ? 60 : 90;
+    haze.far = when.hour >= 20 ? 420 : 620;
+    for (const c of clouds) c.material.opacity = when.hour >= 20 ? 0.12 : 0.3;
   }
 
   // Build the environment map from the sky itself (needs a renderer, once per time).
-  function buildEnvironment(renderer) {
-    if (!pmrem) pmrem = new THREE.PMREMGenerator(renderer);
-    const envScene = new THREE.Scene();
-    const dome2 = new THREE.Mesh(skyGeo, skyMat);
-    envScene.add(dome2);
-    const tex = pmrem.fromScene(envScene, 0.04).texture;
-    scene.environment = tex;
+  function buildEnvironment(rdr) {
+    if (!pm) pm = new THREE.PMREMGenerator(rdr);
+    const env = new THREE.Scene();
+    const copy = new THREE.Mesh(domeGeo, domeMat);
+    env.add(copy);
+    const tex = pm.fromScene(env, 0.04).texture;
+    scn.environment = tex;
   }
 
   return { dome, clouds, applyTime, buildEnvironment };

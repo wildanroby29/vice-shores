@@ -16,34 +16,36 @@ import { createAudio } from './audio.js';
 import { stageShot } from './shots.js';
 
 const MAX_FRAME = 0.25;
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
-const detail = params.get('detail') === 'low' ? 'low' : 'full';
-const flat = params.get('flat') === '1';
-const oldHud = params.get('hud') === 'old';
+const query = new URLSearchParams(window.location.search);
+const shotName = query.get('shot');
+const seedRaw = Number.parseInt(query.get('seed') ?? '', 10);
+const seedNum = Number.isInteger(seedRaw) ? seedRaw : Math.floor(Math.random() * 4294967296);
+const detail = query.get('detail') === 'low' ? 'low' : 'full';
+const flat = query.get('flat') === '1';
+const legacyHud = query.get('hud') === 'old';
 
 const canvas = document.getElementById('game');
-const status = document.getElementById('status');
+const statusEl = document.getElementById('status');
 const hud = createHud();
 const audio = createAudio();
-const game = createGame(canvas, { rand: createRandom(seed), detail, hud, audio, flat });
+const g = createGame(canvas, { rand: createRandom(seedNum), detail, hud, audio, flat });
 if (flat) {
   // WP1 before: no colour grade, no vignette.
   document.getElementById('game').style.filter = 'none';
   document.getElementById('vignette').style.display = 'none';
 }
-if (oldHud) {
-  const s = document.createElement('style');
-  s.textContent = '.glass{background:rgba(0,0,0,0.85)!important;backdrop-filter:none!important;border:1px solid #000!important;border-radius:0!important}';
-  document.head.appendChild(s);
+if (legacyHud) {
+  const fix = document.createElement('style');
+  fix.textContent = '.glass{background:rgba(0,0,0,0.85)!important;backdrop-filter:none!important;border:1px solid #000!important;border-radius:0!important}';
+  document.head.appendChild(fix);
 }
 
-function announce(message) { status.textContent = message; }
+function announce(message) {
+  statusEl.textContent = message;
+}
 
 function runShot(name) {
-  const scene = stageShot(name, game);
+  const staged = stageShot(name, g);
   hud.hideTitle();
   if (name === 'title') {
     // Title card over the live boulevard: big logo, HUD hidden.
@@ -55,45 +57,45 @@ function runShot(name) {
     hud.setHudVisible(false);
   } else {
     hud.hideTitleCard();
-    hud.update(game.hudState());
+    hud.update(g.hudState());
     hud.setHudVisible(true);
   }
-  let painted = 0;
-  function paint() {
-    game.render();
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
+  let frames = 0;
+  function draw() {
+    g.render();
+    frames += 1;
+    if (frames < 2) requestAnimationFrame(draw);
     else window.__shotReady = true;
   }
-  requestAnimationFrame(paint);
-  void scene;
+  requestAnimationFrame(draw);
+  void staged;
 }
 
 function runGame() {
   const input = createInput(canvas);
   let screen = SCREEN_TITLE;
   let menuIndex = 0;
-  game.setScreen(SCREEN_TITLE);
-  game.setCamMode('title');
-  hud.showTitle(game.getSaveSlots());
+  g.setScreen(SCREEN_TITLE);
+  g.setCamMode('title');
+  hud.showTitle(g.getSaveSlots());
   hud.setHudVisible(false);
   announce('Vice Shores. Press Space or click to start.');
 
   function startGame() {
-    game.setScreen(SCREEN_PLAY);
-    game.setCamMode('chase');
+    g.setScreen(SCREEN_PLAY);
+    g.setCamMode('chase');
     hud.hideTitle();
     hud.setHudVisible(true);
     screen = SCREEN_PLAY;
     audio.engineStart();
     announce('Playing. Follow the gold marker for Marla\'s job.');
-    game.say('Marla: "One pickup, no questions. Coral Row, blue awning."', 5);
+    g.say('Marla: "One pickup, no questions. Coral Row, blue awning."', 5);
   }
 
   function toTitle() {
-    game.setScreen(SCREEN_TITLE);
-    game.setCamMode('title');
-    hud.showTitle(game.getSaveSlots());
+    g.setScreen(SCREEN_TITLE);
+    g.setCamMode('title');
+    hud.showTitle(g.getSaveSlots());
     hud.setHudVisible(false);
     screen = SCREEN_TITLE;
     audio.engineStop();
@@ -101,62 +103,89 @@ function runGame() {
   }
 
   function handleActions() {
-    const actions = input.takeActions();
+    const flags = input.takeActions();
     if (hud.mapOpen()) {
-      if (actions & (ACTION_MAP | ACTION_PAUSE)) { hud.hideMap(); }
+      if (flags & (ACTION_MAP | ACTION_PAUSE)) {
+        hud.hideMap();
+      }
       return;
     }
     if (hud.shopOpen()) {
-      if (actions & (ACTION_SHOP | ACTION_PAUSE)) { hud.hideShop(); screen = SCREEN_PLAY; }
+      if (flags & (ACTION_SHOP | ACTION_PAUSE)) {
+        hud.hideShop();
+        screen = SCREEN_PLAY;
+      }
       return;
     }
     if (screen === SCREEN_TITLE) {
-      if (actions & ACTION_CONFIRM) startGame();
+      if (flags & ACTION_CONFIRM) startGame();
       return;
     }
-    if (actions & ACTION_PAUSE) {
-      if (screen === SCREEN_PLAY) { screen = SCREEN_PAUSED; game.setScreen(SCREEN_PAUSED); announce('Paused.'); }
-      else if (screen === SCREEN_PAUSED) { screen = SCREEN_PLAY; game.setScreen(SCREEN_PLAY); announce('Playing.'); }
+    if (flags & ACTION_PAUSE) {
+      if (screen === SCREEN_PLAY) {
+        screen = SCREEN_PAUSED;
+        g.setScreen(SCREEN_PAUSED);
+        announce('Paused.');
+      } else if (screen === SCREEN_PAUSED) {
+        screen = SCREEN_PLAY;
+        g.setScreen(SCREEN_PLAY);
+        announce('Playing.');
+      }
     }
     if (screen !== SCREEN_PLAY) return;
-    if (actions & ACTION_ENTER) game.enterCar();
-    if (actions & ACTION_MAP) { hud.drawBigMap(game.hudState().map); hud.showMap(); }
-    if (actions & ACTION_SHOP) { hud.showShop(); }
-    if (actions & ACTION_RADIO) { const r = game.missions.cycleRadio(); hud.toast(`${r.station} — ${r.song}`); }
-    if (actions & ACTION_WEAPON) { const w = game.missions.cycleWeapon(); hud.toast(`Weapon: ${w.name}`); }
-    if (actions & ACTION_CAMERA) { game.setCamMode(game.state.camMode === 'chase' ? 'pier' : 'chase'); }
+    if (flags & ACTION_ENTER) g.enterCar();
+    if (flags & ACTION_MAP) {
+      hud.drawBigMap(g.hudState().map);
+      hud.showMap();
+    }
+    if (flags & ACTION_SHOP) {
+      hud.showShop();
+    }
+    if (flags & ACTION_RADIO) {
+      const station = g.missions.cycleRadio();
+      hud.toast(`${station.station} — ${station.song}`);
+    }
+    if (flags & ACTION_WEAPON) {
+      const weapon = g.missions.cycleWeapon();
+      hud.toast(`Weapon: ${weapon.name}`);
+    }
+    if (flags & ACTION_CAMERA) {
+      g.setCamMode(g.state.camMode === 'chase' ? 'pier' : 'chase');
+    }
   }
 
-  canvas.addEventListener('pointerdown', () => { if (screen === SCREEN_PLAY) game.shoot(); });
-
-  hud.onBuy((item) => {
-    if (game.buyUpgrade(item)) hud.markOwned(item.key);
+  canvas.addEventListener('pointerdown', () => {
+    if (screen === SCREEN_PLAY) g.shoot();
   });
 
-  let accumulator = 0;
-  let last = performance.now();
+  hud.onBuy((item) => {
+    if (g.buyUpgrade(item)) hud.markOwned(item.key);
+  });
+
+  let acc = 0;
+  let prev = performance.now();
   function frame(now) {
     requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
-    last = now;
+    acc += Math.min((now - prev) / 1000, MAX_FRAME);
+    prev = now;
     handleActions();
-    const mv = input.read();
-    const act = {
-      fwd: mv.fwd, back: mv.back, left: mv.left, right: mv.right,
-      run: mv.run, shoot: mv.shoot, enter: false,
+    const move = input.read();
+    const keys = {
+      fwd: move.fwd, back: move.back, left: move.left, right: move.right,
+      run: move.run, shoot: move.shoot, enter: false,
     };
     if (screen === SCREEN_PLAY || screen === SCREEN_TITLE) {
-      while (accumulator >= STEP && (screen === SCREEN_PLAY || screen === SCREEN_TITLE)) {
-        game.step(STEP, act);
-        accumulator -= STEP;
+      while (acc >= STEP && (screen === SCREEN_PLAY || screen === SCREEN_TITLE)) {
+        g.step(STEP, keys);
+        acc -= STEP;
       }
-    } else accumulator = 0;
-    if (screen === SCREEN_PLAY) hud.update(game.hudState());
-    game.render();
+    } else acc = 0;
+    if (screen === SCREEN_PLAY) hud.update(g.hudState());
+    g.render();
     void menuIndex;
   }
   requestAnimationFrame(frame);
 }
 
-if (shot) runShot(shot);
+if (shotName) runShot(shotName);
 else runGame();

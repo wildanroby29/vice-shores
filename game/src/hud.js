@@ -68,9 +68,9 @@ const CSS = `
 `;
 
 export function createHud() {
-  const style = document.createElement('style');
-  style.textContent = CSS;
-  document.head.appendChild(style);
+  const css = document.createElement('style');
+  css.textContent = CSS;
+  document.head.appendChild(css);
 
   const hud = document.createElement('div');
   hud.id = 'hud';
@@ -88,19 +88,19 @@ export function createHud() {
     <div id="health" class="glass"><div>HEALTH</div><div class="hb"><i></i></div><div style="margin-top:5px">ARMOUR</div><div class="hb ab"><i></i></div></div>
     <div id="toast" class="glass"></div>`;
   document.body.appendChild(hud);
-  const vig = document.createElement('div');
-  vig.id = 'vignette';
-  document.body.appendChild(vig);
+  const vignette = document.createElement('div');
+  vignette.id = 'vignette';
+  document.body.appendChild(vignette);
 
   const $ = (id) => document.getElementById(id);
-  const mm = $('minimap').getContext('2d');
+  const mini = $('minimap').getContext('2d');
 
   // Full-screen map overlay.
-  const mapOv = document.createElement('div');
-  mapOv.id = 'mapOv';
-  mapOv.innerHTML = `<div class="card"><div style="font-weight:800;font-size:17px;margin-bottom:8px">VICE SHORES — FULL MAP <span style="float:right;font-size:12px;opacity:0.7">press M to close</span></div><canvas id="bigmap" width="860" height="640"></canvas><div class="legend">◆ You &nbsp; ● Police &nbsp; ◆ Mission &nbsp; — Roads &nbsp; ■ Buildings &nbsp; <span style="color:#ffb36b">Coral Row</span> · <span style="color:#7fb2ff">Marina</span> · <span style="color:#7de08a">Pier</span> · Bank District · North Garage · Plaza</div></div>`;
-  document.body.appendChild(mapOv);
-  const big = $('bigmap').getContext('2d');
+  const mapBox = document.createElement('div');
+  mapBox.id = 'mapOv';
+  mapBox.innerHTML = `<div class="card"><div style="font-weight:800;font-size:17px;margin-bottom:8px">VICE SHORES — FULL MAP <span style="float:right;font-size:12px;opacity:0.7">press M to close</span></div><canvas id="bigmap" width="860" height="640"></canvas><div class="legend">◆ You &nbsp; ● Police &nbsp; ◆ Mission &nbsp; — Roads &nbsp; ■ Buildings &nbsp; <span style="color:#ffb36b">Coral Row</span> · <span style="color:#7fb2ff">Marina</span> · <span style="color:#7de08a">Pier</span> · Bank District · North Garage · Plaza</div></div>`;
+  document.body.appendChild(mapBox);
+  const bigMap = $('bigmap').getContext('2d');
 
   // Professional shop overlay.
   const SHOP = [
@@ -111,28 +111,28 @@ export function createHud() {
     { name: 'Chrome Wheels', desc: 'Polished chrome rims with low-profile tyres. Pure boulevard style.', price: 650, key: 'wheels' },
     { name: 'Body Kit', desc: 'Front splitter, side skirts and a rear wing. The GT looks the part.', price: 1500, key: 'bodykit' },
   ];
-  const shopOv = document.createElement('div');
-  shopOv.id = 'shopOv';
-  shopOv.innerHTML = `<div class="card"><div style="font-weight:800;font-size:17px">VICE CUSTOMS — UPGRADES <span style="float:right;font-size:12px;opacity:0.7">press G to close</span></div><div class="grid"></div></div>`;
-  document.body.appendChild(shopOv);
-  const grid = shopOv.querySelector('.grid');
-  const owned = new Set();
-  const buyHandlers = [];
+  const shopBox = document.createElement('div');
+  shopBox.id = 'shopOv';
+  shopBox.innerHTML = `<div class="card"><div style="font-weight:800;font-size:17px">VICE CUSTOMS — UPGRADES <span style="float:right;font-size:12px;opacity:0.7">press G to close</span></div><div class="grid"></div></div>`;
+  document.body.appendChild(shopBox);
+  const gridEl = shopBox.querySelector('.grid');
+  const ownedKeys = new Set();
+  const buyers = [];
   for (const item of SHOP) {
     const el = document.createElement('div');
     el.className = 'item';
     el.innerHTML = `<h4>${item.name}</h4><p>${item.desc}</p><div class="price">$${item.price}</div><button>BUY</button>`;
     el.querySelector('button').addEventListener('click', () => {
-      for (const h of buyHandlers) h(item, el);
+      for (const h of buyers) h(item, el);
     });
-    grid.appendChild(el);
+    gridEl.appendChild(el);
   }
 
   // Title screen overlay (SVG logo: heavy italic poster lettering, chrome/sunset
   // gradient, thin neon glow outline, retro sun with slits, palm silhouette).
-  const titleOv = document.createElement('div');
-  titleOv.id = 'title';
-  titleOv.innerHTML = `
+  const titleBox = document.createElement('div');
+  titleBox.id = 'title';
+  titleBox.innerHTML = `
     <svg width="640" height="330" viewBox="0 0 640 330" aria-label="Vice Shores">
       <defs>
         <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
@@ -159,16 +159,16 @@ export function createHud() {
     <div class="menu"><div class="sel">CONTINUE</div><div>NEW GAME</div><div>LOAD GAME</div><div>SETTINGS</div></div>
     <div class="slots"></div>
     <div class="ctrl">WASD drive &nbsp;·&nbsp; E enter / steal car &nbsp;·&nbsp; SPACE shoot &nbsp;·&nbsp; SHIFT sprint / nitro &nbsp;·&nbsp; C camera &nbsp;·&nbsp; M map &nbsp;·&nbsp; G customs &nbsp;·&nbsp; P pause</div>`;
-  document.body.appendChild(titleOv);
+  document.body.appendChild(titleBox);
 
   // Title card overlay for the ?shot=title screenshot: the big logo over the
   // live golden-hour boulevard (no menu soup), HUD hidden. Round 9: the logo
   // is ONE line, centred, ~60% of frame width; the retro sun is centred
   // BEHIND it and its slit lines are drawn BEHIND the text in sunset-gradient
   // colours (never black, never crossing a letter).
-  const titleCard = document.createElement('div');
-  titleCard.id = 'titleCard';
-  titleCard.innerHTML = `
+  const cardBox = document.createElement('div');
+  cardBox.id = 'titleCard';
+  cardBox.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center">
     <svg width="900" height="300" viewBox="0 0 900 300" aria-label="Vice Shores">
       <defs>
@@ -195,55 +195,60 @@ export function createHud() {
     <div class="sub">A SUN-SOAKED CITY OF YOUR OWN</div>
     </div>
     <div class="press">PRESS START</div>`;
-  document.body.appendChild(titleCard);
+  document.body.appendChild(cardBox);
 
-  function drawMap(ctx, W, H, data) {
+  function drawMap(g, W, H, data) {
     const s = Math.min(W, H) / 440;
     const ox = (W - 440 * s) / 2, oy = (H - 440 * s) / 2;
     const X = (x) => ox + (x + 220) * s, Y = (z) => oy + (z + 220) * s;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#16233a';
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#2a4a22';
-    ctx.fillRect(ox, oy, 440 * s, 440 * s);
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = '#16233a';
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = '#2a4a22';
+    g.fillRect(ox, oy, 440 * s, 440 * s);
     // Sea + sand.
-    ctx.fillStyle = '#1d5f7a';
-    ctx.fillRect(X(176), oy, 440 * s - (176 + 220) * s, 440 * s);
-    ctx.fillStyle = '#e8cf9a';
-    ctx.fillRect(X(176), oy, 34 * s, 440 * s);
-    ctx.fillRect(ox, Y(176), 440 * s, 34 * s);
+    g.fillStyle = '#1d5f7a';
+    g.fillRect(X(176), oy, 440 * s - (176 + 220) * s, 440 * s);
+    g.fillStyle = '#e8cf9a';
+    g.fillRect(X(176), oy, 34 * s, 440 * s);
+    g.fillRect(ox, Y(176), 440 * s, 34 * s);
     // Roads.
-    ctx.strokeStyle = '#2e2e36';
-    ctx.lineWidth = 10 * s;
+    g.strokeStyle = '#2e2e36';
+    g.lineWidth = 10 * s;
     for (let i = -4; i <= 4; i += 1) {
       const c = i * 60;
-      ctx.beginPath(); ctx.moveTo(ox, Y(c)); ctx.lineTo(ox + 440 * s, Y(c)); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(X(c), oy); ctx.lineTo(X(c), oy + 440 * s); ctx.stroke();
+      g.beginPath(); g.moveTo(ox, Y(c)); g.lineTo(ox + 440 * s, Y(c)); g.stroke();
+      g.beginPath(); g.moveTo(X(c), oy); g.lineTo(X(c), oy + 440 * s); g.stroke();
     }
     // Buildings.
-    ctx.fillStyle = '#8a94a8';
-    for (const b of data.buildings) ctx.fillRect(X(b.x - b.w / 2), Y(b.z - b.d / 2), b.w * s, b.d * s);
+    g.fillStyle = '#8a94a8';
+    for (const b of data.buildings) g.fillRect(X(b.x - b.w / 2), Y(b.z - b.d / 2), b.w * s, b.d * s);
     // Pier.
-    ctx.fillStyle = '#8a6a4a';
-    ctx.fillRect(X(180), Y(150), 10 * s, 90 * s);
+    g.fillStyle = '#8a6a4a';
+    g.fillRect(X(180), Y(150), 10 * s, 90 * s);
     // Mission marker.
-    ctx.fillStyle = '#ffd94a';
+    g.fillStyle = '#ffd94a';
     const mx = X(data.mission[0]), my = Y(data.mission[1]);
-    ctx.save(); ctx.translate(mx, my); ctx.rotate(Math.PI / 4); ctx.fillRect(-6, -6, 12, 12); ctx.restore();
+    g.save(); g.translate(mx, my); g.rotate(Math.PI / 4); g.fillRect(-6, -6, 12, 12); g.restore();
     // Police dots.
-    for (const p of data.police) { ctx.fillStyle = '#ff4040'; ctx.beginPath(); ctx.arc(X(p.x), Y(p.z), 4, 0, 7); ctx.fill(); }
+    for (const p of data.police) {
+      g.fillStyle = '#ff4040';
+      g.beginPath(); g.arc(X(p.x), Y(p.z), 4, 0, 7); g.fill();
+    }
     // Player arrow.
-    ctx.save(); ctx.translate(X(data.player.x), Y(data.player.z)); ctx.rotate(data.player.heading);
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 6); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill(); ctx.restore();
+    g.save(); g.translate(X(data.player.x), Y(data.player.z)); g.rotate(data.player.heading);
+    g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(0, -8); g.lineTo(6, 6); g.lineTo(-6, 6); g.closePath(); g.fill(); g.restore();
   }
 
-  let toastTimer = 0;
+  let toastClock = 0;
   function toast(msg) {
     const t = $('toast');
     t.textContent = msg;
     t.style.display = 'block';
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.style.display = 'none'; }, 2600);
+    clearTimeout(toastClock);
+    toastClock = setTimeout(() => {
+      t.style.display = 'none';
+    }, 2600);
   }
 
   function update(st) {
@@ -251,47 +256,61 @@ export function createHud() {
     $('obj').querySelector('.s').textContent = st.mission.short;
     $('obj').querySelector('.bar i').style.width = `${(st.missionDone / 8) * 100}%`;
     $('rank').textContent = `RANK: ${st.rank} · ${st.progress}`;
-    let stars = '';
-    for (let i = 0; i < 5; i += 1) stars += i < st.wanted ? '★' : '<span class="dim">★</span>';
-    $('stars').innerHTML = stars;
+    let starRow = '';
+    for (let i = 0; i < 5; i += 1) starRow += i < st.wanted ? '★' : '<span class="dim">★</span>';
+    $('stars').innerHTML = starRow;
     $('money').querySelector('.m').textContent = `$${st.money.toLocaleString('en-US')}`;
     $('money').querySelector('.c').textContent = st.timeStr;
     $('money').querySelector('.r').textContent = `${st.radio.station} — ${st.radio.song}`;
-    const rows = $('dispatch').querySelector('.rows');
-    rows.innerHTML = st.dispatch.map((d) => `<div class="row"><span><b>${d.name}</b> · ${d.tactic}</span><span>${d.dist} m</span></div>`).join('') || '<div class="row"><span>No units on you</span><span>—</span></div>';
+    const dispatchRows = $('dispatch').querySelector('.rows');
+    dispatchRows.innerHTML = st.dispatch.map((d) => `<div class="row"><span><b>${d.name}</b> · ${d.tactic}</span><span>${d.dist} m</span></div>`).join('') || '<div class="row"><span>No units on you</span><span>—</span></div>';
     $('speedo').querySelector('.n').textContent = Math.round(st.speedKmh);
     $('speedo').querySelector('.car').textContent = st.carName;
     $('speedo').querySelector('.cond').textContent = st.onFoot ? 'ON FOOT' : `CONDITION ${st.condition}%`;
     $('weapon').textContent = `${st.weapon.name}${st.weapon.ammo === Infinity ? '' : ' · ' + st.weapon.ammo}`;
-    const crew = $('crew');
-    crew.innerHTML = st.crew.map((c) => `<div class="k glass"><b>${c.key}</b> ${c.name}</div>`).join('');
+    const crewEl = $('crew');
+    crewEl.innerHTML = st.crew.map((c) => `<div class="k glass"><b>${c.key}</b> ${c.name}</div>`).join('');
     $('sub').textContent = st.dialogue || '';
-    const hb = $('health').querySelectorAll('.hb i');
-    hb[0].style.width = `${st.health}%`;
-    hb[1].style.width = `${st.armour}%`;
-    drawMap(mm, 180, 180, st.map);
+    const bars = $('health').querySelectorAll('.hb i');
+    bars[0].style.width = `${st.health}%`;
+    bars[1].style.width = `${st.armour}%`;
+    drawMap(mini, 180, 180, st.map);
   }
 
-  function drawBigMap(data) { drawMap(big, 860, 640, data); }
+  function drawBigMap(data) {
+    drawMap(bigMap, 860, 640, data);
+  }
 
   return {
     update, toast, drawBigMap,
-    showMap() { mapOv.style.display = 'flex'; },
-    hideMap() { mapOv.style.display = 'none'; },
-    mapOpen() { return mapOv.style.display === 'flex'; },
-    showShop() { shopOv.style.display = 'flex'; },
-    hideShop() { shopOv.style.display = 'none'; },
-    shopOpen() { return shopOv.style.display === 'flex'; },
-    onBuy(fn) { buyHandlers.push(fn); },
-    markOwned(key) { owned.add(key); for (const el of grid.children) { const b = el.querySelector('button'); if (b && el.querySelector('h4').textContent && SHOP.find((s) => s.key === key && el.querySelector('h4').textContent === s.name)) { b.disabled = true; b.textContent = 'OWNED'; } } },
+    showMap() { mapBox.style.display = 'flex'; },
+    hideMap() { mapBox.style.display = 'none'; },
+    mapOpen() { return mapBox.style.display === 'flex'; },
+    showShop() { shopBox.style.display = 'flex'; },
+    hideShop() { shopBox.style.display = 'none'; },
+    shopOpen() { return shopBox.style.display === 'flex'; },
+    onBuy(fn) { buyers.push(fn); },
+    markOwned(key) {
+      ownedKeys.add(key);
+      for (const el of gridEl.children) {
+        const b = el.querySelector('button');
+        if (b && el.querySelector('h4').textContent && SHOP.find((s) => s.key === key && el.querySelector('h4').textContent === s.name)) {
+          b.disabled = true;
+          b.textContent = 'OWNED';
+        }
+      }
+    },
     showTitle(slots) {
-      titleOv.style.display = 'flex';
-      const box = titleOv.querySelector('.slots');
+      titleBox.style.display = 'flex';
+      const box = titleBox.querySelector('.slots');
       box.innerHTML = slots.map((s) => `<div class="slot"><span><b>${s.label}</b> · ${s.act}</span><span>${s.pct} · ${s.missions} · ${s.money}</span></div>`).join('');
     },
-    hideTitle() { titleOv.style.display = 'none'; },
-    showTitleCard() { titleCard.style.display = 'flex'; },
-    hideTitleCard() { titleCard.style.display = 'none'; },
-    setHudVisible(v) { hud.style.display = v ? 'block' : 'none'; vig.style.display = v ? 'block' : 'none'; },
+    hideTitle() { titleBox.style.display = 'none'; },
+    showTitleCard() { cardBox.style.display = 'flex'; },
+    hideTitleCard() { cardBox.style.display = 'none'; },
+    setHudVisible(v) {
+      hud.style.display = v ? 'block' : 'none';
+      vignette.style.display = v ? 'block' : 'none';
+    },
   };
 }
