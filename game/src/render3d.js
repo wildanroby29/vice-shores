@@ -1,132 +1,121 @@
-// The 3D renderer for Vice Shores: a golden-hour sky dome with a gradient and a
-// sun disc, warm directional sunlight, haze fog, and the cameras — chase cam behind
-// the car, over-the-shoulder on foot, the low cinematic title camera, and the
-// workshop camera. A shot camera override lets the screenshot scenes frame exactly.
-export function createRenderer3D(THREE, canvas) {
+// Vice Shores — the 3D renderer. Golden-hour sunlight, a gradient sky dome
+// with a sun disc, warm haze, and the cameras: third-person on foot, chase
+// cam behind the car, and the fixed shot camera the screenshot system uses.
+// three.js is loaded by the page as a classic script (game/vendor/three.min.js),
+// so the modules read it from the window global instead of importing the UMD
+// build (an ES-module import of a UMD file yields an empty namespace).
+const THREE = window.THREE;
+
+export function makeRenderer(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.25;
+  return renderer;
+}
 
+export function makeScene() {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xffd9a0, 90, 260);
-
-  // Sky dome: a big sphere painted with a sunset gradient, sun low in the west.
-  const skyCanvas = document.createElement('canvas');
-  skyCanvas.width = 16;
-  skyCanvas.height = 512;
-  const sg = skyCanvas.getContext('2d');
-  const grad = sg.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#2e6fb0');
-  grad.addColorStop(0.45, '#7fb3d5');
-  grad.addColorStop(0.62, '#ffd98a');
-  grad.addColorStop(0.72, '#ff9a4d');
-  grad.addColorStop(0.8, '#ff7a3c');
-  grad.addColorStop(1, '#e85d3d');
-  sg.fillStyle = grad;
-  sg.fillRect(0, 0, 16, 512);
-  const skyTex = new THREE.CanvasTexture(skyCanvas);
-  skyTex.colorSpace = THREE.SRGBColorSpace;
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(420, 24, 16),
-    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }),
-  );
-  scene.add(sky);
-
-  // The sun: a bright disc low over the ocean.
-  const sun = new THREE.Mesh(
-    new THREE.CircleGeometry(26, 32),
-    new THREE.MeshBasicMaterial({ color: 0xfff3c4, fog: false }),
-  );
-  sun.position.set(-330, 42, -60);
-  sun.lookAt(0, 0, 0);
+  scene.fog = new THREE.Fog(0xf2c98a, 90, 240);
+  // Warm golden-hour sun, low over the ocean to the west, so it lights the
+  // west and south faces the cameras see (never a black wall in shadow).
+  const sun = new THREE.DirectionalLight(0xffd9a0, 2.6);
+  sun.position.set(-70, 55, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -90;
+  sun.shadow.camera.right = 90;
+  sun.shadow.camera.top = 90;
+  sun.shadow.camera.bottom = -90;
+  sun.shadow.camera.far = 260;
   scene.add(sun);
-  const sunGlow = new THREE.Mesh(
-    new THREE.CircleGeometry(46, 32),
-    new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0.35, fog: false }),
-  );
-  sunGlow.position.set(-330, 42, -60);
-  sunGlow.lookAt(0, 0, 0);
-  scene.add(sunGlow);
-
-  // Golden-hour light: warm sun from the west, cool sky fill from above.
-  const sunLight = new THREE.DirectionalLight(0xffd9a0, 1.9);
-  sunLight.position.set(-120, 70, -40);
-  scene.add(sunLight);
-  const hemi = new THREE.HemisphereLight(0xbfd9ff, 0xffc46b, 0.85);
+  const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x8a6a4a, 1.25);
   scene.add(hemi);
-  const bounce = new THREE.DirectionalLight(0xff9a4d, 0.35);
-  bounce.position.set(80, 30, 60);
-  scene.add(bounce);
-
-  const camera = new THREE.PerspectiveCamera(62, 1280 / 800, 0.1, 900);
-
-  let shotCam = null;
-
-  function resize(w, h) {
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
+  // Gradient sky dome.
+  const skyGeo = new THREE.SphereGeometry(400, 24, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      top: { value: new THREE.Color(0x7fb8e8) },
+      mid: { value: new THREE.Color(0xf2c98a) },
+      low: { value: new THREE.Color(0xff9a5a) },
+    },
+    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `varying vec3 vP;
+      uniform vec3 top; uniform vec3 mid; uniform vec3 low;
+      void main(){
+        float h = normalize(vP).y;
+        vec3 c = h > 0.25 ? mix(mid, top, smoothstep(0.25, 0.8, h)) : mix(low, mid, smoothstep(-0.08, 0.25, h));
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  scene.add(new THREE.Mesh(skyGeo, skyMat));
+  // Sun disc low over the ocean to the west, visible in chase/title shots:
+  // a warm ORANGE glow hugging the horizon — a sunset sun, never a big
+  // white circle like a moon.
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(12, 32), new THREE.MeshBasicMaterial({ color: 0xff9a3d, fog: false }));
+  disc.position.set(-200, 34, -180);
+  disc.lookAt(0, 0, 0);
+  scene.add(disc);
+  // Soft orange halo around the disc so it glows instead of looking flat.
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(22, 32), new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.28, fog: false }));
+  halo.position.set(-206, 34, -186);
+  halo.lookAt(0, 0, 0);
+  scene.add(halo);
+  // A few soft clouds, kept flat and faint so they never read as grey
+  // balloons crowding the sky.
+  for (let i = 0; i < 8; i++) {
+    const cloud = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+    );
+    cloud.scale.set(14 + i * 2, 1.4, 5);
+    cloud.position.set(-160 + i * 45, 60 + (i % 3) * 12, -180 - (i % 2) * 40);
+    scene.add(cloud);
   }
+  return scene;
+}
 
-  // Smooth camera helper: ease the camera toward a target position and look point.
-  const camPos = new THREE.Vector3(0, 8, 20);
-  const camLook = new THREE.Vector3(0, 1, 0);
+export function makeCamera() {
+  const cam = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 600);
+  cam.position.set(0, 4, 10);
+  return cam;
+}
 
-  function frameCamera(mode, player, car, dt, t) {
-    if (shotCam) {
-      camera.position.set(shotCam.pos.x, shotCam.pos.y, shotCam.pos.z);
-      camera.lookAt(shotCam.look.x, shotCam.look.y, shotCam.look.z);
-      return;
-    }
-    let targetPos;
-    let targetLook;
-    if (mode === 'title') {
-      // Low cinematic camera looking down the boulevard at the city, angled
-      // slightly east so the ocean shows on the left and the road runs diagonal.
-      targetPos = new THREE.Vector3(-54, 4.5, 20);
-      targetLook = new THREE.Vector3(-50, 7, -70);
-    } else if (mode === 'garage') {
-      targetPos = new THREE.Vector3(-44.5, 2.6, 88);
-      targetLook = new THREE.Vector3(-52, 1.2, 96);
-    } else if (car) {
-      // Close chase cam behind the car.
-      const back = 9.5;
-      const height = 3.4;
-      const hx = Math.cos(car.heading);
-      const hz = -Math.sin(car.heading);
-      targetPos = new THREE.Vector3(car.x - hx * back, height, car.z - hz * back);
-      targetLook = new THREE.Vector3(car.x + hx * 6, 1.2, car.z + hz * 6);
-    } else {
-      // Close over-the-shoulder on foot.
-      const hx = Math.cos(player.heading);
-      const hz = -Math.sin(player.heading);
-      targetPos = new THREE.Vector3(player.x - hx * 4.2, 2.3, player.z - hz * 4.2);
-      targetLook = new THREE.Vector3(player.x + hx * 8, 1.5, player.z + hz * 8);
-    }
-    const ease = Math.min(1, dt * 5);
-    camPos.lerp(targetPos, ease);
-    camLook.lerp(targetLook, ease);
-    // A touch of life: the camera breathes with the golden hour.
-    camera.position.set(camPos.x, camPos.y + Math.sin(t * 0.5) * 0.05, camPos.z);
-    camera.lookAt(camLook);
-  }
+// Third-person follow camera. On foot: close over-the-shoulder. Driving:
+// a chase cam behind the car. The camera eases toward its target so it
+// never snaps.
+export function updateCamera(cam, target, onFoot, dt) {
+  const back = onFoot ? 4.2 : 9.5;
+  const height = onFoot ? 2.3 : 3.4;
+  const side = 0.9;
+  const fx = Math.sin(target.rot);
+  const fz = Math.cos(target.rot);
+  const px = -fz * side;
+  const pz = fx * side;
+  const tx = target.x - fx * back + px;
+  const tz = target.z - fz * back + pz;
+  const ty = height;
+  const k = 1 - Math.exp(-6 * dt);
+  cam.position.x += (tx - cam.position.x) * k;
+  cam.position.y += (ty - cam.position.y) * k;
+  cam.position.z += (tz - cam.position.z) * k;
+  cam.lookAt(target.x + fx * 6, onFoot ? 1.4 : 1.2, target.z + fz * 6);
+}
 
-  return {
-    renderer,
-    scene,
-    camera,
-    resize,
-    frameCamera,
-    setShotCam(cam) {
-      shotCam = cam;
-    },
-    clearShotCam() {
-      shotCam = null;
-    },
-    render() {
-      renderer.render(scene, camera);
-    },
-  };
+// A fixed shot camera: place it exactly and look exactly at a point.
+export function setShotCamera(cam, pos, look) {
+  cam.position.set(pos[0], pos[1], pos[2]);
+  cam.lookAt(look[0], look[1], look[2]);
+}
+
+export function resize(renderer, cam) {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  cam.aspect = w / h;
+  cam.updateProjectionMatrix();
 }

@@ -1,43 +1,28 @@
-// Seeded random numbers for Vice Shores: one deterministic stream per seed, so the
-// same seed always builds the same city, the same traffic and the same pedestrians.
-export function makeRng(seed) {
-  let state = (seed >>> 0) || 1;
-  const next = () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
-  return {
-    next,
-    // Integer in [min, max).
-    int(min, max) {
-      return min + Math.floor(next() * (max - min));
-    },
-    // Float in [min, max).
-    range(min, max) {
-      return min + next() * (max - min);
-    },
-    // One item from an array.
-    pick(list) {
-      return list[Math.floor(next() * list.length)];
-    },
-    // True with the given probability.
-    chance(p) {
-      return next() < p;
-    },
-    // A value with a random sign.
-    signed(mag) {
-      return (next() < 0.5 ? -1 : 1) * mag;
-    },
+// Seeded random numbers for Vice Shores — deterministic per seed so a
+// screenshot run is reproducible. Mulberry32 plus small helpers.
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-// A tiny shuffle that reuses a seeded stream.
-export function shuffle(rng, list) {
-  for (let i = list.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rng.next() * (i + 1));
-    const tmp = list[i];
-    list[i] = list[j];
-    list[j] = tmp;
+// rng is always the first argument: range(rng, lo, hi), pick(rng, arr), chance(rng, p).
+export function range(rng, lo, hi) { return lo + rng() * (hi - lo); }
+export function rangeInt(rng, lo, hi) { return Math.floor(range(rng, lo, hi + 1)); }
+export function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+export function chance(rng, p) { return rng() < p; }
+export function shuffle(rng, arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
   }
-  return list;
+  return a;
 }
+export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+export function lerp(a, b, t) { return a + (b - a) * t; }
+export function damp(cur, target, rate, dt) { return cur + (target - cur) * (1 - Math.exp(-rate * dt)); }

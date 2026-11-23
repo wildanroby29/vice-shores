@@ -1,140 +1,163 @@
-// People for Vice Shores: multi-part low-poly figures with heads, torsos, arms and
-// legs, varied heights and outfits, a walk swing, and uniformed police officers with
-// caps who read as police at a glance.
-import { WORLD } from './config.js';
+// Vice Shores — people. Every person is built from readable parts (head,
+// torso, arms, legs) with varied heights and outfits, and walks with a
+// simple leg/arm swing. Police officers wear dark navy uniforms with caps
+// and, when closing in, hold their arms out toward the player.
+// three.js is loaded by the page as a classic script (game/vendor/three.min.js),
+// so the modules read it from the window global instead of importing the UMD
+// build (an ES-module import of a UMD file yields an empty namespace).
+const THREE = window.THREE;
+import { range, pick, mulberry32 } from './random.js';
 
-const SKINS = [0xf2c89a, 0xd9a066, 0x8a5a32, 0xf2d0a8, 0xc98a5a];
-const SHIRTS = [0xe74c3c, 0x2e6fb0, 0x39d0ff, 0xffe14d, 0x7ee081, 0xff5ea8, 0xf2e6c9, 0x9b59b6, 0xffffff, 0x1c1e22];
-const PANTS = [0x2c3550, 0x3a3f47, 0x5a4632, 0x1c1e22, 0x7a8a99];
+const SKINS = [0xe8b88a, 0xc98a5e, 0x8a5a3a, 0xf0c8a0];
+const SHIRTS = [0xd84a3a, 0x3a6fd8, 0x4a9e6a, 0xe8d21f, 0x7a4a8a, 0xf0f0f0, 0xff8a3d, 0x35b5c8];
+const PANTS = [0x2a3440, 0x4a3a28, 0x5a5a66, 0x1c2a3a];
 
-// One person: head, torso, two arms, two legs. `uniform` makes a police officer.
-export function makePerson(THREE, rng, opts) {
+export function makePerson(rng, opts) {
   const o = opts || {};
-  const person = new THREE.Group();
-  const height = o.height || rng.range(1.65, 1.9);
-  const skin = new THREE.MeshLambertMaterial({ color: o.skin ?? SKINS[rng.int(0, SKINS.length)] });
-  const shirtMat = new THREE.MeshLambertMaterial({ color: o.shirt ?? SHIRTS[rng.int(0, SHIRTS.length)] });
-  const pantsMat = new THREE.MeshLambertMaterial({ color: o.pants ?? PANTS[rng.int(0, PANTS.length)] });
-  const s = height / 1.8;
-
+  const height = o.height || range(rng, 1.55, 1.9);
+  const skin = o.skin || pick(rng, SKINS);
+  const shirt = o.shirt || pick(rng, SHIRTS);
+  const pants = o.pants || pick(rng, PANTS);
+  const g = new THREE.Group();
+  const skinMat = new THREE.MeshLambertMaterial({ color: skin });
+  const shirtMat = new THREE.MeshLambertMaterial({ color: shirt });
+  const pantsMat = new THREE.MeshLambertMaterial({ color: pants });
   // Legs.
-  const legGeo = new THREE.BoxGeometry(0.16 * s, 0.8 * s, 0.16 * s);
-  const legL = new THREE.Mesh(legGeo, pantsMat);
-  legL.position.set(-0.11 * s, 0.4 * s, 0);
-  person.add(legL);
-  const legR = new THREE.Mesh(legGeo, pantsMat);
-  legR.position.set(0.11 * s, 0.4 * s, 0);
-  person.add(legR);
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, height * 0.48, 0.16), pantsMat);
+  legL.position.set(-0.11, height * 0.24, 0);
+  g.add(legL);
+  const legR = legL.clone();
+  legR.position.x = 0.11;
+  g.add(legR);
   // Torso.
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5 * s, 0.62 * s, 0.28 * s), shirtMat);
-  torso.position.y = 1.11 * s;
-  person.add(torso);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, height * 0.32, 0.24), shirtMat);
+  torso.position.y = height * 0.64;
+  g.add(torso);
   // Arms.
-  const armGeo = new THREE.BoxGeometry(0.13 * s, 0.6 * s, 0.13 * s);
-  const armL = new THREE.Mesh(armGeo, shirtMat);
-  armL.position.set(-0.33 * s, 1.12 * s, 0);
-  person.add(armL);
-  const armR = new THREE.Mesh(armGeo, shirtMat);
-  armR.position.set(0.33 * s, 1.12 * s, 0);
-  person.add(armR);
-  // Head with hair.
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3 * s, 0.32 * s, 0.3 * s), skin);
-  head.position.y = 1.62 * s;
-  person.add(head);
-  const hair = new THREE.Mesh(
-    new THREE.BoxGeometry(0.32 * s, 0.12 * s, 0.32 * s),
-    new THREE.MeshLambertMaterial({ color: o.hair ?? 0x2a1a0e }),
-  );
-  hair.position.y = 1.8 * s;
-  person.add(hair);
-  if (o.uniform) {
-    // Police: dark navy uniform, badge, and a peaked cap.
-    torso.material = new THREE.MeshLambertMaterial({ color: 0x1d2a44 });
-    armL.material = new THREE.MeshLambertMaterial({ color: 0x1d2a44 });
-    armR.material = new THREE.MeshLambertMaterial({ color: 0x1d2a44 });
-    legL.material = new THREE.MeshLambertMaterial({ color: 0x141c2e });
-    legR.material = new THREE.MeshLambertMaterial({ color: 0x141c2e });
-    const capTop = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.19 * s, 0.2 * s, 0.09 * s, 8),
-      new THREE.MeshLambertMaterial({ color: 0x141c2e }),
-    );
-    capTop.position.y = 1.84 * s;
-    person.add(capTop);
-    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.3 * s, 0.03 * s, 0.16 * s), new THREE.MeshLambertMaterial({ color: 0x0a0f1c }));
-    brim.position.set(0, 1.8 * s, 0.18 * s);
-    person.add(brim);
-    const badge = new THREE.Mesh(new THREE.BoxGeometry(0.1 * s, 0.12 * s, 0.02 * s), new THREE.MeshBasicMaterial({ color: 0xffd21f }));
-    badge.position.set(-0.12 * s, 1.28 * s, 0.15 * s);
-    person.add(badge);
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.12, height * 0.3, 0.12), shirtMat);
+  armL.position.set(-0.3, height * 0.62, 0);
+  g.add(armL);
+  const armR = armL.clone();
+  armR.position.x = 0.3;
+  g.add(armR);
+  // Head.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.24), skinMat);
+  head.position.y = height * 0.88;
+  g.add(head);
+  // Hair or cap.
+  if (o.cap) {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.1, 8), new THREE.MeshLambertMaterial({ color: 0x141a24 }));
+    cap.position.y = height * 0.88 + 0.16;
+    g.add(cap);
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.04, 0.16), new THREE.MeshLambertMaterial({ color: 0x141a24 }));
+    brim.position.set(0, height * 0.88 + 0.13, 0.16);
+    g.add(brim);
+  } else {
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.26), new THREE.MeshLambertMaterial({ color: o.hair || pick(rng, [0x1c1a16, 0x4a2a12, 0x8a6a3a, 0x777777]) }));
+    hair.position.y = height * 0.88 + 0.15;
+    g.add(hair);
   }
-  person.userData.limbs = { legL, legR, armL, armR };
-  person.userData.height = height;
-  return person;
+  // Face: BIG readable eyes (white sclera + dark pupil, so the eyes read
+  // even when the face is in shadow), nose and mouth — the character reads
+  // as a person with an expression, not a blank doll or a dark mask.
+  // The face is on the +z side of the head.
+  const hy = height * 0.88;
+  const scleraMat = new THREE.MeshBasicMaterial({ color: 0xf8f8f0 });
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0x1a1210 });
+  for (const ex of [-0.06, 0.06]) {
+    const sclera = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.02), scleraMat);
+    sclera.position.set(ex, hy + 0.03, 0.125);
+    g.add(sclera);
+    const pupil = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.02), pupilMat);
+    pupil.position.set(ex, hy + 0.03, 0.135);
+    g.add(pupil);
+  }
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.05), skinMat);
+  nose.position.set(0, hy - 0.02, 0.135);
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.02, 0.02), new THREE.MeshBasicMaterial({ color: 0x5a2a22 }));
+  mouth.position.set(0, hy - 0.075, 0.125);
+  g.add(nose, mouth);
+  // Optional details: a moustache for a veteran officer, a hair bun for a
+  // female officer — small touches that make the three officers distinct.
+  if (o.mustache) {
+    const mo = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.02), new THREE.MeshBasicMaterial({ color: 0x2a1a10 }));
+    mo.position.set(0, hy - 0.045, 0.13);
+    g.add(mo);
+  }
+  if (o.bun) {
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshLambertMaterial({ color: o.hair || 0x2a1a10 }));
+    bun.position.set(0, hy + 0.05, -0.13);
+    g.add(bun);
+  }
+  g.userData = { legL, legR, armL, armR, head, height, phase: rng() * Math.PI * 2 };
+  return g;
 }
 
-// Pedestrians walking the sidewalks in groups, crossing at corners.
-export function createPedestrians(THREE, rng, scene, count) {
+// A uniformed officer: navy uniform, cap, and arms held out toward the
+// player when closing in (reach = true).
+export function makeOfficer(rng, reach, opts) {
+  const o = opts || {};
+  // Light skin tones for the officers so their faces read clearly in the
+  // golden-hour light — never a dark mask.
+  const g = makePerson(rng, { skin: pick(rng, [0xe8b88a, 0xf0c8a0, 0xc98a5e]), shirt: 0x1c2a4a, pants: 0x141a28, cap: true, height: range(rng, 1.75, 1.88), mustache: o.mustache, bun: o.bun, hair: o.hair });
+  // Badge.
+  const badge = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.02), new THREE.MeshBasicMaterial({ color: 0xffd21f }));
+  badge.position.set(-0.12, g.userData.height * 0.72, 0.13);
+  g.add(badge);
+  if (reach) {
+    // Arms out, reaching toward the player.
+    g.userData.armL.rotation.x = -1.25;
+    g.userData.armR.rotation.x = -1.25;
+    g.userData.armL.position.z = 0.2;
+    g.userData.armR.position.z = 0.2;
+  }
+  return g;
+}
+
+export function animateWalk(person, t, speed) {
+  const u = person.userData;
+  const swing = Math.sin(t * 7 + u.phase) * 0.5 * Math.min(1, speed);
+  u.legL.rotation.x = swing;
+  u.legR.rotation.x = -swing;
+  u.armL.rotation.x = -swing * 0.8;
+  u.armR.rotation.x = swing * 0.8;
+}
+
+// Pedestrians wandering the sidewalks.
+export function makePedestrians(scene, count) {
+  const rng = mulberry32(4242);
   const peds = [];
-  // Sidewalk walking loops: rectangles around a few blocks.
-  const loops = [
-    { x0: -30, x1: 6, z0: -30, z1: 6 },
-    { x0: 6, x1: 42, z0: 6, z1: 42 },
-    { x0: -58, x1: -44, z0: -40, z1: 60 },
-    { x0: 42, x1: 78, z0: -30, z1: 6 },
-    { x0: 6, x1: 42, z0: -66, z1: -30 },
-    { x0: 78, x1: 114, z0: 42, z1: 78 },
+  const walks = [
+    { x: -38, z0: -110, z1: 110 },
+    { x: -34, z0: -110, z1: 110 },
+    { x: -52, z0: -110, z1: 110 },
+    { x: -6, z0: -110, z1: 110 },
+    { x: 12, z0: -110, z1: 110 },
+    { x: 40, z0: -110, z1: 110 },
+    { x: 58, z0: -110, z1: 110 },
   ];
-  for (let i = 0; i < count; i += 1) {
-    const loop = loops[i % loops.length];
-    const mesh = makePerson(THREE, rng, {});
-    scene.add(mesh);
-    // Start at a random point on the loop's edge.
-    const edge = rng.int(0, 4);
-    let x = loop.x0;
-    let z = loop.z0;
-    if (edge === 0) { x = rng.range(loop.x0, loop.x1); z = loop.z0; }
-    if (edge === 1) { x = loop.x1; z = rng.range(loop.z0, loop.z1); }
-    if (edge === 2) { x = rng.range(loop.x0, loop.x1); z = loop.z1; }
-    if (edge === 3) { x = loop.x0; z = rng.range(loop.z0, loop.z1); }
-    peds.push({
-      mesh,
-      loop,
-      x,
-      z,
-      dir: rng.chance(0.5) ? 1 : -1,
-      speed: rng.range(1.0, 1.9),
-      phase: rng.range(0, Math.PI * 2),
-      edge,
-    });
-    mesh.position.set(x, 0, z);
+  for (let i = 0; i < count; i++) {
+    const walk = pick(rng, walks);
+    const p = makePerson(rng);
+    const dir = chance(rng, 0.5) ? 1 : -1;
+    p.position.set(walk.x + range(rng, -1.5, 1.5), 0, range(rng, walk.z0, walk.z1));
+    p.rotation.y = dir > 0 ? 0 : Math.PI;
+    p.userData.speed = range(rng, 0.8, 1.6);
+    p.userData.dir = dir;
+    p.userData.walk = walk;
+    scene.add(p);
+    peds.push(p);
   }
-  return {
-    peds,
-    update(dt, t) {
-      for (const ped of peds) {
-        const { loop } = ped;
-        // Walk along the loop's edge, turning corners.
-        let { x, z } = ped;
-        const sp = ped.speed * ped.dir * dt;
-        if (ped.edge === 0) { x += sp; if (x > loop.x1) { x = loop.x1; ped.edge = 1; } if (x < loop.x0) { x = loop.x0; ped.edge = 3; } }
-        else if (ped.edge === 1) { z += sp; if (z > loop.z1) { z = loop.z1; ped.edge = 2; } if (z < loop.z0) { z = loop.z0; ped.edge = 0; } }
-        else if (ped.edge === 2) { x -= sp; if (x < loop.x0) { x = loop.x0; ped.edge = 3; } if (x > loop.x1) { x = loop.x1; ped.edge = 1; } }
-        else { z -= sp; if (z < loop.z0) { z = loop.z0; ped.edge = 0; } if (z > loop.z1) { z = loop.z1; ped.edge = 2; } }
-        ped.x = x;
-        ped.z = z;
-        const heading = ped.edge === 0 ? Math.PI / 2 : ped.edge === 1 ? Math.PI : ped.edge === 2 ? -Math.PI / 2 : 0;
-        ped.mesh.rotation.y = heading * (ped.dir > 0 ? 1 : -1) + (ped.dir > 0 ? 0 : Math.PI);
-        ped.mesh.position.set(x, 0, z);
-        // Walk swing.
-        const swing = Math.sin(t * 7 + ped.phase) * 0.45;
-        const limbs = ped.mesh.userData.limbs;
-        limbs.legL.rotation.x = swing;
-        limbs.legR.rotation.x = -swing;
-        limbs.armL.rotation.x = -swing * 0.7;
-        limbs.armR.rotation.x = swing * 0.7;
-      }
-    },
-  };
+  return peds;
 }
 
-export { WORLD };
+export function updatePedestrians(peds, dt, t) {
+  for (const p of peds) {
+    p.position.z += p.userData.dir * p.userData.speed * dt;
+    if (p.position.z > p.userData.walk.z1) { p.position.z = p.userData.walk.z1; p.userData.dir = -1; p.rotation.y = Math.PI; }
+    if (p.position.z < p.userData.walk.z0) { p.position.z = p.userData.walk.z0; p.userData.dir = 1; p.rotation.y = 0; }
+    animateWalk(p, t, 1);
+  }
+}
+
+function chance(rng, p) { return rng() < p; }
