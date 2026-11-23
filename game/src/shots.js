@@ -1,245 +1,290 @@
-// The four screenshot stagings for Vice Shores. Each one places the world exactly:
-// the chase climax, the on-foot surround, the poster title, and the airbrush
-// workshop. Every shot is judged by eye before it ships — if it looks plain, empty
-// or ugly, it is re-staged, never accepted.
-import { makeCar, makeBurningWreck } from './vehicles.js';
-import { makePerson } from './people.js';
+// shots.js — the 4 screenshot scenes behind ?shot=title|chase|onfoot|pier.
+// Each one stages a deterministic scene from the seeded game (time of day,
+// mission, wanted level, positions), drives the simulation forward with a
+// scripted input so the frame is what real play looks like, and returns the
+// screen to draw. Same seed always gives the same frame.
+// ?shot=asset_car|asset_police|asset_hero|asset_building|asset_heli are
+// debug turntables: ONE asset alone, close-up 3/4 view, neutral background.
+// They are NOT part of the 4-shot dossier (they render to /tmp, not
+// screenshots/).
+import { STEP } from './config.js';
+import { createRandom } from './random.js';
+import { SCREEN_PLAY } from './render3d.js';
+import { makeBuilding, PALETTES } from './city.js';
 
-function headingTo(tx, tz, fx, fz) {
-  // Heading whose forward vector (cos h, -sin h) points from (fx,fz) to (tx,tz).
-  return Math.atan2(-(tz - fz), tx - fx);
+const IDLE = { fwd: false, back: false, left: false, right: false, run: false, shoot: false, enter: false };
+const DRIVE = { ...IDLE, fwd: true };
+
+function forward(game, seconds, input) {
+  const steps = Math.round(seconds / STEP);
+  for (let i = 0; i < steps; i += 1) game.step(STEP, input || DRIVE);
+}
+
+// Turntable helper: hide the whole world so ONE asset reads alone on a
+// neutral background, then frame it in 3/4 view with the 'asset' camera.
+function isolateAsset(game, subject, view) {
+  game.city.group.visible = false;
+  for (const c of game.traffic.cars) c.group.visible = false;
+  for (const p of game.peds.peds) p.group.visible = false;
+  for (const c of game.police.cars) c.group.visible = false;
+  for (const o of game.police.officers) o.group.visible = false;
+  game.heli.group.visible = false;
+  game.marker.visible = false;
+  game.heroCar.group.visible = false;
+  game.rook.group.visible = false;
+  for (const c of game.sky.clouds) c.visible = false;
+  game.glitter.visible = false;
+  game.scene.background = new THREE.Color(0x2e3644);
+  game.sky.dome.visible = false;
+  game.scene.fog = null;
+  if (subject) subject.visible = true;
+  // Neutral ground disc so the asset is grounded, not floating in a void.
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(30, 32), new THREE.MeshStandardMaterial({ color: 0x3a4250, roughness: 1 }));
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0;
+  disc.receiveShadow = true;
+  game.scene.add(disc);
+  game.setTimeOfDay('afternoon');
+  game.setCamMode('asset');
+  game.setAssetView(view);
 }
 
 export function stageShot(name, game) {
-  const { THREE, scene, state, renderer3d, missions, police } = game;
-  state.screen = 'play';
-  renderer3d.clearShotCam();
-
+  game.setScreen(SCREEN_PLAY);
+  game.missions.money = 12650;
+  if (name === 'asset_car') {
+    // Hero GT alone, 3/4 front view (front = +Z, camera at +X+Z).
+    // Rotation is set AFTER forward(): step() resets it to state.heading.
+    game.heroCar.group.position.set(0, 0, 0);
+    isolateAsset(game, game.heroCar.group, { x: 0, y: 0.8, z: 0, dist: 9, height: 3.2, az: Math.PI / 4, fov: 50 });
+    forward(game, 0.5, IDLE);
+    game.heroCar.group.rotation.y = 0;
+    return { screen: SCREEN_PLAY };
+  }
+  if (name === 'asset_police') {
+    // Police car alone, 3/4 front view.
+    // Rotation is set AFTER forward(): police.update() turns it toward the hero.
+    const car = game.police.spawnCar(0, 0, 'PURSUIT');
+    isolateAsset(game, car.group, { x: 0, y: 0.8, z: 0, dist: 9, height: 3.2, az: Math.PI / 4, fov: 50 });
+    forward(game, 0.5, IDLE);
+    car.group.rotation.y = 0;
+    return { screen: SCREEN_PLAY };
+  }
+  if (name === 'asset_hero') {
+    // Rook alone, 3/4 view, full body (front = +Z, camera at +X+Z).
+    game.rook.group.position.set(0, 0, 0);
+    game.rook.group.rotation.y = 0;
+    isolateAsset(game, game.rook.group, { x: 0, y: 1.0, z: 0, dist: 4.5, height: 1.8, az: Math.PI / 4, fov: 50 });
+    forward(game, 0.5, IDLE);
+    return { screen: SCREEN_PLAY };
+  }
+  if (name === 'asset_building') {
+    // One new-template building alone (terracotta palette, lit windows).
+    const rand = createRandom(7);
+    const b = makeBuilding(rand, 0, 0, 24, 20, 28, PALETTES[2], 'full', true);
+    game.scene.add(b);
+    isolateAsset(game, b, { x: 0, y: 12, z: 0, dist: 55, height: 16, az: Math.PI / 4, fov: 50 });
+    forward(game, 0.5, IDLE);
+    return { screen: SCREEN_PLAY };
+  }
+  if (name === 'asset_heli') {
+    // Helicopter alone, hovering, rotor spinning, 3/4 view.
+    // The beam aims at the hero position, so park the (hidden) hero car
+    // directly below the heli: the cone then points straight down.
+    game.heroCar.group.position.set(0, 0, 0);
+    game.heli.group.position.set(0, 18, 0);
+    game.heli.setHold(0, 18, 0);
+    game.setWanted(3);
+    isolateAsset(game, game.heli.group, { x: 0, y: 18, z: 0, dist: 14, height: 19.5, az: Math.PI / 4, fov: 50 });
+    forward(game, 1.0, IDLE);
+    return { screen: SCREEN_PLAY };
+  }
+  if (name === 'title') {
+    // Cinematic title card OVER the live golden-hour boulevard. The HUD is
+    // hidden and the big SVG logo (hud.js #titleCard) does the branding.
+    // Hero GT in 3/4 view in the left third, 5 traffic cars, 12 pedestrians.
+    game.setTimeOfDay('golden');
+    game.setMission(0); // First Light
+    game.setHero(180, -20, 0, true); // hero GT on the boulevard, heading south
+    game.setCamMode('titlecard');
+    game.setWanted(0);
+    forward(game, 1.5, IDLE); // let the camera settle on the hero
+    // Traffic ahead of the hero on the boulevard (parked for the photo).
+    const spots = [[176, -8, 0], [184, 2, Math.PI], [176, 12, 0], [184, 22, Math.PI], [176, 32, 0]];
+    spots.forEach(([x, z, rot], i) => {
+      const c = game.traffic.cars[i];
+      if (!c) return;
+      c.group.position.set(x, 0, z);
+      c.group.rotation.y = rot;
+      c.x = x; c.z = z; c.speed = 0;
+    });
+    // Pedestrians on both sidewalks of the boulevard.
+    game.peds.peds.forEach((p, i) => {
+      if (i >= 12) return;
+      const px = i % 2 === 0 ? 170 : 190;
+      const pz = -15 + i * 4;
+      p.tx = px; p.tz = pz;
+      p.group.position.set(px, 0, pz);
+    });
+    return { screen: SCREEN_PLAY };
+  }
   if (name === 'chase') {
-    // 5-star chase climax on the beachfront boulevard, bright sun, ocean left.
-    state.jobIndex = 6;
-    state.jobProgress = 0.6;
-    state.wanted = 5;
-    state.money = 86250;
-    state.time = 18.38;
-    state.dialogue = 'Marla: Five stars, Rook — and the whole city is watching the boulevard. Do not slow down.';
-    state.dialogueTimer = 99;
-    missions.start(6);
-    missions.hide(); // the beacon pillar would sit right in front of the chase camera
-    // The player's GT, mid-boulevard, heading north at 122 km/h.
-    const gt = game.playerCar;
-    gt.mesh.position.set(-52, 0, 30);
-    gt.mesh.rotation.y = Math.PI / 2;
-    gt.speed = 34;
-    gt.heading = Math.PI / 2;
-    state.player.x = -52;
-    state.player.z = 30;
-    state.player.heading = Math.PI / 2;
-    state.player.inCar = gt;
-    state.player.onFoot = false;
-    game.playerMesh.visible = false;
-    // Police: sync spawns 7 units + the helicopter, then place them by hand.
-    police.sync(-52, 30, 5, 0.016, 1.2);
-    const units = police.units;
-    const place = (unit, x, z, heading) => {
-      unit.mesh.position.set(x, 0, z);
-      unit.mesh.rotation.y = heading;
-    };
-    if (units[0]) place(units[0], -55.5, 26.5, Math.PI / 2 + 0.3); // rammer: rear quarter, left side, angled in
-    if (units[1]) place(units[1], -48, 16, Math.PI / 2 - 0.2); // flanker ahead right
-    if (units[2]) place(units[2], -55, 8, Math.PI / 2); // chaser mid-pack
-    if (units[3]) place(units[3], -49, 2, Math.PI / 2); // roadblock left
-    if (units[4]) place(units[4], -52, 0, Math.PI / 2); // roadblock centre
-    if (units[5]) place(units[5], -55, -2, Math.PI / 2); // roadblock right
-    if (units[6]) place(units[6], -48.5, 38, Math.PI / 2 + 0.5); // trailing, closing in
-    // Two burning wrecks with REAL fire, on the shoulders ahead, close to camera.
-    const wreck1 = makeBurningWreck(THREE, game.rng);
-    wreck1.group.position.set(-47, 0, 18);
-    wreck1.group.rotation.y = 0.5;
-    scene.add(wreck1.group);
-    game.wrecks.push(wreck1);
-    const wreck2 = makeBurningWreck(THREE, game.rng);
-    wreck2.group.position.set(-57, 0, 10);
-    wreck2.group.rotation.y = -0.7;
-    scene.add(wreck2.group);
-    game.wrecks.push(wreck2);
-    // Helicopter fully in frame, high and to the right, so its narrow beam slants
-    // in from the frame edge instead of washing out the centre.
-    if (police.heli) {
-      police.heli.group.position.set(-46, 13, 10);
-    }
-    // Traffic ahead on the boulevard so the road feels alive.
-    const taxi = game.traffic.cars.find((c) => c.mesh.userData.kind === 'taxi');
-    if (taxi) {
-      taxi.mesh.position.set(-52, 0, -14);
-      taxi.mesh.rotation.y = Math.PI / 2;
-    }
-    // Low close chase camera, slightly to the left so the GT shows its side,
-    // spoiler and wheels — a three-quarter rear view, not a flat box from behind.
-    renderer3d.setShotCam({
-      pos: { x: -55.5, y: 3.2, z: 36.5 },
-      look: { x: -51, y: 1.4, z: 10 },
-    });
-    return { screen: 'play' };
-  }
-
-  if (name === 'onfoot') {
-    // The surround: Rook at the yellow cab, door open, driver out, two uniformed
-    // officers closing in from either side, a police car blocking the road ahead,
-    // and a busy street full of pedestrians on both sidewalks.
-    state.jobIndex = 1;
-    state.jobProgress = 0.3;
-    state.wanted = 2;
-    state.money = 6420;
-    state.time = 18.38;
-    state.dialogue = 'Marla: That cab on Palm Row is yours, Rook. Take it — the driver already knows the drill.';
-    state.dialogueTimer = 99;
-    missions.start(1);
-    missions.hide(); // the beacon pillar would sit in the middle of the street
-    state.player.x = 0;
-    state.player.z = 20;
-    state.player.heading = Math.PI / 2;
-    state.player.onFoot = true;
-    state.player.inCar = null;
-    game.playerMesh.visible = true;
-    game.playerMesh.position.set(0, 0, 20);
-    game.playerMesh.rotation.y = Math.PI / 2;
-    // The Sunline Cab right in front of Rook, door open, driver stepping out.
-    const cab = game.parkedCars.find((c) => c.kind === 'taxi') || game.parkedCars[0];
-    if (cab) {
-      cab.mesh.position.set(0.4, 0, 15);
-      cab.mesh.rotation.y = Math.PI / 2;
-      cab.taken = true;
-      // Open door: a thin panel swung out toward the sidewalk.
-      const door = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, 0.9, 1.0),
-        new THREE.MeshLambertMaterial({ color: 0xffd21f }),
-      );
-      door.position.set(1.6, 0.75, 15.8);
-      door.rotation.y = -0.9;
-      scene.add(door);
-      game.staged.push(door);
-    }
-    const driver = makePerson(THREE, game.rng, { shirt: 0xf2e6c9, height: 1.75 });
-    driver.position.set(2.2, 0, 16.5);
-    driver.rotation.y = headingTo(0, 20, 2.2, 16.5);
-    scene.add(driver);
-    game.staged.push(driver);
-    // Three uniformed officers closing in, close enough to read as police and
-    // close enough to feel like a trap: two flanking, one ahead-left.
-    police.sync(0, 20, 2, 0.016, 1.2);
-    const officers = police.spawnOfficers(scene, [
-      { x: -2.6, z: 17, heading: headingTo(0, 20, -2.6, 17) },
-      { x: 2.8, z: 17.5, heading: headingTo(0, 20, 2.8, 17.5) },
-      { x: -4.5, z: 10, heading: headingTo(0, 20, -4.5, 10) },
-    ]);
-    game.staged.push(...officers);
-    const units = police.units;
-    // A police car angled across the road just ahead of the cab, clearly blocking it.
-    if (units[0]) { units[0].mesh.position.set(0, 0, 10); units[0].mesh.rotation.y = -Math.PI / 2 + 0.6; }
-    if (units[1]) { units[1].mesh.position.set(-6, 0, 26); units[1].mesh.rotation.y = Math.PI / 2; }
-    // A busy street: pedestrians on both sidewalks, several close to the camera.
-    const pedSpots = [
-      [-8.5, 26, 0.6], [-8.5, 16, -0.4], [-9, 8, 1.2], [8.5, 24, -2.2], [8.5, 14, 2.6],
-      [9, 6, -1.0], [-8.5, 32, 0.2], [8.5, 32, 3.0], [-8, 2, -0.8], [8, -2, 0.9],
-      [-8.5, 22, 1.8], [8.5, 20, -1.6], [-9, 28, 0.9], [9, 28, 2.4],
+    // Blue-hour night, 5 stars, helicopter VISIBLE with a volumetric cone,
+    // 4 police cars within 10-30 m, skid smoke, 3/4 rear angle + roll.
+    game.setTimeOfDay('night');
+    game.setMission(1); // Heat Wave: lose the heat on the boulevard
+    game.setHero(0, 60, Math.PI, true); // driving north on the central road
+    game.setCamMode('chaseShot');
+    game.setWanted(5);
+    forward(game, 4, DRIVE);
+    const hp = game.hudState().map.player; // hero's spot after driving north
+    // Four police cars posed 10-30 m from the hero (frozen, lights flashing).
+    const poses = [
+      [hp.x - 6, hp.z - 20], [hp.x + 7, hp.z - 25],
+      [hp.x - 5, hp.z + 15], [hp.x + 6, hp.z + 18],
     ];
-    for (const [px, pz, face] of pedSpots) {
-      const ped = makePerson(THREE, game.rng, {});
-      ped.position.set(px, 0, pz);
-      ped.rotation.y = face;
-      const limbs = ped.userData.limbs;
-      limbs.legL.rotation.x = 0.25;
-      limbs.legR.rotation.x = -0.25;
-      scene.add(ped);
-      game.staged.push(ped);
+    poses.forEach(([x, z], i) => {
+      const c = game.police.cars[i];
+      if (!c) return;
+      c.group.position.set(x, 0, z);
+      c.group.rotation.y = Math.PI;
+      c.speed = 0;
+    });
+    // Four MORE police cars on the flanks, 10-25 m out (round 9: 8 units in
+    // the chase, some on the sides), angled in at the hero, lights flashing.
+    const flank = [
+      [hp.x - 14, hp.z - 8], [hp.x + 14, hp.z - 10],
+      [hp.x - 13, hp.z + 8], [hp.x + 13, hp.z + 5],
+    ];
+    for (const [x, z] of flank) {
+      const c = game.police.spawnCar(x, z, 'FLANKING');
+      c.group.rotation.y = Math.atan2(hp.x - x, hp.z - z);
+      c.speed = 0;
     }
-    // Close over-the-shoulder camera, low and near, straight down the street.
-    renderer3d.setShotCam({
-      pos: { x: 0, y: 1.9, z: 23.5 },
-      look: { x: 0, y: 1.3, z: 6 },
+    // Helicopter held ahead-left in frame, beam locked on the hero. Snapped
+    // there at once (a lerp alone would still be behind the camera at the
+    // screenshot — the heli starts ~170 m back after the 4 s drive).
+    // Round 9: closer + lower so the heli is >= 6% of frame width.
+    if (game.heli.setHold) {
+      game.heli.setHold(hp.x - 12, 14, hp.z - 28);
+      game.heli.group.position.set(hp.x - 12, 14, hp.z - 28);
+      game.heli.aimAt({ x: hp.x, z: hp.z });
+    }
+    // Skid smoke LAST (after every forward): the hero drives away from smoke
+    // spawned earlier, so puffs must sit at the hero's final spot.
+    // Hotfix: small puffs (<= car length) at 0.25 opacity — the old 2.6-3.6
+    // sprites at 0.55 read as a big white haze under the hero.
+    game.effects.spawnSmoke(hp.x - 2, 0.8, hp.z + 4, 1.6, 1.6, 0xe8e2d8);
+    game.effects.spawnSmoke(hp.x + 2, 0.8, hp.z + 4, 1.6, 1.6, 0xe8e2d8);
+    game.effects.spawnSmoke(hp.x, 0.8, hp.z - 3, 1.4, 1.4, 0xe8e2d8);
+    game.effects.spawnSmoke(hp.x - 1, 0.8, hp.z + 6, 1.8, 1.8, 0xe8e2d8);
+    game.effects.spawnSmoke(hp.x + 3, 0.8, hp.z + 2, 1.3, 1.4, 0xe8e2d8);
+    return { screen: SCREEN_PLAY };
+  }
+  if (name === 'onfoot') {
+    // Afternoon, over-the-shoulder, job 3 (The Courier) on the boulevard.
+    // Hero in the LEFT third, a short firefight (muzzle flashes + tracers +
+    // sparks), subtitle clear of the characters. Round 9: staged NORTH of the
+    // pier (z=140) so the pier deck/rails cannot cut the foreground — the
+    // pier is behind the camera here, not in the frame.
+    game.setTimeOfDay('afternoon');
+    game.setMission(2);
+    game.setHero(180, 140, Math.PI, false); // Rook on foot on the boulevard, facing north toward the marker
+    game.setAim(true); // Rook holds the pistol aim pose through step()
+    game.setCamMode('onfoot');
+    game.setWanted(2);
+    // Three officers closing in between Rook and the marker, facing him; a police car angled across the road.
+    const rp = { x: 177, z: 142 }; // Rook's actual spot (setHero offsets by -3,+2)
+    const offs = [[-8, -14], [8, -16], [0, -20]];
+    game.police.officers.length = 0;
+    for (const [dx, dz] of offs) {
+      const o = game.police.spawnOfficer(rp.x + dx, rp.z + dz);
+      o.group.lookAt(rp.x, 0, rp.z);
+      o.parts.aim(true); // enemy peds with pistols out, aiming at Rook
+    }
+    const blocker = game.police.spawnCar(rp.x + 3, rp.z - 27);
+    blocker.group.rotation.y = Math.PI * 0.32;
+    // Park the police cars as a roadblock so they don't drive onto Rook.
+    for (const c of game.police.cars) c.speed = 0;
+    // One police car visible in frame, 15 m ahead on the road (dispatch must
+    // match the scene: a listed unit has to be seen near the player).
+    if (game.police.cars[0]) {
+      game.police.cars[0].group.position.set(rp.x + 6, 0, rp.z - 15);
+      game.police.cars[0].group.rotation.y = Math.PI;
+    }
+    // A yellow cab parked ahead-left on the road edge (frozen: traffic would
+    // otherwise drive it right up to the camera).
+    const cab = game.traffic.cars[0];
+    cab.group.position.set(171, 0, 118);
+    cab.group.rotation.y = Math.PI * 0.5;
+    cab.speed = 0;
+    // Pedestrians on both sidewalks ahead of Rook (12 in frame).
+    game.peds.peds.forEach((p, i) => {
+      if (i >= 12) return;
+      const px = i % 2 === 0 ? 171 : 189;
+      const pz = 108 + i * 3;
+      p.tx = px; p.tz = pz;
+      p.group.position.set(px, 0, pz);
     });
-    return { screen: 'play' };
-  }
-
-  if (name === 'garage') {
-    // Dockside Customs, mid airbrush-paint: the GT on the lift, the painter at its
-    // flank with the spray cone, cans and tools and tyres around, neon glowing.
-    state.jobIndex = 4;
-    state.jobProgress = 0.5;
-    state.wanted = 0;
-    state.money = 12650;
-    state.time = 18.38;
-    state.dialogue = 'Marla: A sunrise paint job buys you a new face. Park it inside, keep the doors shut.';
-    state.dialogueTimer = 99;
-    state.screen = 'garage';
-    state.garageOpen = true;
-    missions.start(4);
-    missions.hide(); // the beacon pillar would rise through the workshop roof
-    const gt = game.playerCar;
-    // The GT on the lift, facing east so the south-east camera sees its front
-    // three-quarter: side, wheels, spoiler and nose in one frame.
-    gt.mesh.position.set(-52, 0.8, 96);
-    gt.mesh.rotation.y = 0;
-    gt.heading = 0;
-    gt.speed = 0;
-    state.player.x = -52;
-    state.player.z = 96;
-    state.player.inCar = gt;
-    state.player.onFoot = false;
-    game.playerMesh.visible = false;
-    // The painter, on the car's south flank, facing it, spray gun raised.
-    const painter = makePerson(THREE, game.rng, { shirt: 0x2e6fb0, pants: 0x2c3550, height: 1.8 });
-    painter.position.set(-50, 0.06, 93.6);
-    painter.rotation.y = headingTo(-52, 96, -50, 93.6);
-    const limbs = painter.userData.limbs;
-    limbs.armR.rotation.x = -1.2;
-    limbs.armL.rotation.x = -0.4;
-    scene.add(painter);
-    game.staged.push(painter);
-    // The airbrush spray cone: apex at the gun, wide end opening onto the flank.
-    const spray = new THREE.Mesh(
-      new THREE.ConeGeometry(1.0, 3.0, 12, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xff8a3c, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
-    );
-    spray.position.set(-51, 1.25, 94.9);
-    const sprayDir = new THREE.Vector3(-2, -0.1, 2.4).normalize();
-    spray.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), sprayDir.clone().negate());
-    scene.add(spray);
-    game.staged.push(spray);
-    // A drop cloth by the lift for craft detail.
-    const cloth = new THREE.Mesh(
-      new THREE.BoxGeometry(2.2, 0.06, 1.4),
-      new THREE.MeshLambertMaterial({ color: 0xf2e6c9 }),
-    );
-    cloth.position.set(-52, 0.1, 92.5);
-    scene.add(cloth);
-    game.staged.push(cloth);
-    // Slightly elevated close three-quarter view from the south-east: the car BIG
-    // in frame, the lift posts below the sight line, the painter at its flank,
-    // the workbench and neon behind it.
-    renderer3d.setShotCam({
-      pos: { x: -46.5, y: 3.0, z: 91 },
-      look: { x: -52, y: 1.0, z: 96 },
+    // Two pedestrians lying on the road (fallen in the firefight, no gore):
+    // prone across the road (body along X, full 1.8 m silhouette visible
+    // from the over-shoulder camera), frozen by the fallen flag.
+    [[12, rp.x - 3, rp.z - 10], [13, rp.x + 5, rp.z - 12]].forEach(([i, fx, fz]) => {
+      const p = game.peds.peds[i];
+      if (!p) return;
+      p.fallen = true; p.speed = 0; p.tx = fx; p.tz = fz;
+      p.group.position.set(fx, 0.32, fz);
+      p.group.rotation.set(0, 0, Math.PI / 2);
     });
-    return { screen: 'garage' };
+    game.say('Marla: "Case goes to the marina. Don\'t open it."', 6);
+    forward(game, 1.2, IDLE);
+    // Firefight LAST (after every forward) so the muzzle flashes are fresh
+    // and bright at the screenshot instead of faded out.
+    game.shoot(); // Rook's muzzle flash in the frame
+    // Return fire from two officers + tracers + sparks on the roadblock car.
+    game.effects.muzzleFlash(rp.x - 8, 1.4, rp.z - 13);
+    game.effects.muzzleFlash(rp.x + 8, 1.4, rp.z - 15);
+    game.effects.tracer(rp.x, 1.4, rp.z - 3, rp.x - 8, 1.4, rp.z - 13);
+    game.effects.tracer(rp.x - 8, 1.4, rp.z - 13, rp.x - 1, 1.2, rp.z - 4);
+    game.effects.tracer(rp.x + 8, 1.4, rp.z - 15, rp.x + 1, 1.2, rp.z - 5);
+    game.effects.sparks(rp.x + 3, 1.2, rp.z - 26, 10);
+    game.effects.spawnSmoke(rp.x, 1.2, rp.z - 10, 1.2, 0.9, 0xffd98a);
+    return { screen: SCREEN_PLAY };
   }
-
-  // Default: the poster title screen.
-  state.jobIndex = 0;
-  state.jobProgress = 0.2;
-  state.wanted = 0;
-  state.money = 500;
-  state.time = 18.38;
-  state.dialogue = 'Marla: New in town, Rook? One package, one pier. Do not make me regret this.';
-  state.dialogueTimer = 99;
-  state.screen = 'title';
-  missions.start(0);
-  // A little life behind the title: the taxi cruising and a few pedestrians.
-  const taxi = game.traffic.cars.find((c) => c.mesh.userData.kind === 'taxi');
-  if (taxi) {
-    taxi.mesh.position.set(-52, 0, -20);
-    taxi.mesh.rotation.y = Math.PI / 2;
+  if (name === 'pier') {
+    // STREET-LEVEL at the end of the pier, looking back at the skyline at
+    // sunset. Sea + sun glitter in the foreground, boats with wakes, planks /
+    // posts / rails / lamps on the pier, 16 pedestrians. Round 9: the HERO
+    // stands on foot in the LEFT third facing the sea, the GT parked beside
+    // him — and everyone stands ON the deck (its top is y=1.1), feet and
+    // legs visible, not sunk into it.
+    game.setTimeOfDay('sunset');
+    game.setMission(5); // High Tide: meet the boat at the pier
+    // Rook on foot on the pier, FACING THE SEA (south, toward the camera),
+    // LEFT third and CLOSE (7 m from the lens, so he is large and clearly
+    // the hero, not one of the crowd). setHero puts Rook at (x-3, z+2);
+    // (185,228) lands him at (182,230) — 30° left of the camera axis.
+    game.setHero(185, 228, 0, false);
+    game.rook.group.position.y = 1.1; // pier deck top
+    game.setCamMode('pier');
+    game.setWanted(0);
+    // The GT parked on the deck beside Rook (4 m east, 4 m behind him).
+    game.heroCar.group.position.set(186, 1.1, 226);
+    game.heroCar.group.rotation.y = Math.PI;
+    // Crowd the pier deck (rows start 10 m north of Rook so nobody blocks
+    // him) and the beach with pedestrians — 20 on the pier (feet ON the
+    // deck), 4 on the beach.
+    game.peds.peds.forEach((p, i) => {
+      let px; let pz; let py = 0;
+      if (i < 20) { px = 181.5 + (i % 4) * 2.4; pz = 218 - Math.floor(i / 4) * 13; py = 1.1; p.speed = 0; }
+      else { px = 196 + ((i - 20) % 4) * 4; pz = 165 + Math.floor((i - 20) / 4) * 12; }
+      p.tx = px; p.tz = pz;
+      p.group.position.set(px, py, pz);
+    });
+    game.say('Marla: "Boat\'s at the pier end. Tide waits for nobody."', 6);
+    forward(game, 1.5, IDLE);
+    return { screen: SCREEN_PLAY };
   }
-  return { screen: 'title' };
+  // Unknown shot name: fall back to the title card.
+  return stageShot('title', game);
 }

@@ -1,88 +1,53 @@
-// Keyboard and mouse input for Vice Shores. Held keys steer and drive; one-shot
-// presses (enter car, shoot, pause, abilities, garage, radio, camera) are queued as
-// flags and taken once by the loop, so a press between two frames is never lost.
-export const ACT_ENTER = 1;
-export const ACT_SHOOT = 2;
-export const ACT_PAUSE = 4;
-export const ACT_CONFIRM = 8;
-export const ACT_GARAGE = 16;
-export const ACT_RADIO = 32;
-export const ACT_CAMERA = 64;
-export const ACT_CREW_Q = 128;
-export const ACT_CREW_C = 256;
-export const ACT_CREW_V = 512;
-export const ACT_RELOAD = 1024;
+// Input: WASD/arrows drive and walk, E enter/steal car, Space/click shoot,
+// Shift sprint/nitro, C camera, M map, G customs, P pause, R radio, Q weapon.
+// Held keys give movement; one-shot presses are queued as bit flags.
+export const ACTION_CONFIRM = 1;
+export const ACTION_PAUSE = 2;
+export const ACTION_ENTER = 4;
+export const ACTION_MAP = 8;
+export const ACTION_SHOP = 16;
+export const ACTION_RADIO = 32;
+export const ACTION_WEAPON = 64;
+export const ACTION_CAMERA = 128;
 
-const FORWARD = new Set(['KeyW', 'ArrowUp']);
-const BACK = new Set(['KeyS', 'ArrowDown']);
-const LEFT = new Set(['KeyA', 'ArrowLeft']);
-const RIGHT = new Set(['KeyD', 'ArrowRight']);
-const SPRINT = new Set(['ShiftLeft', 'ShiftRight']);
-
-export function createInput(canvas) {
+export function createInput(target) {
   const held = new Set();
   let actions = 0;
-  let weaponKey = 0;
-
-  function keyDown(event) {
-    if (event.repeat) return;
-    held.add(event.code);
-    if (event.code === 'KeyE') actions |= ACT_ENTER;
-    else if (event.code === 'Space') actions |= ACT_SHOOT;
-    else if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACT_PAUSE;
-    else if (event.code === 'Enter') actions |= ACT_CONFIRM;
-    else if (event.code === 'KeyG') actions |= ACT_GARAGE;
-    else if (event.code === 'KeyM') actions |= ACT_RADIO;
-    else if (event.code === 'KeyC') actions |= ACT_CREW_C;
-    else if (event.code === 'KeyV') actions |= ACT_CREW_V;
-    else if (event.code === 'KeyQ') actions |= ACT_CREW_Q;
-    else if (event.code === 'KeyR') actions |= ACT_RELOAD;
-    else if (event.code === 'Digit1') weaponKey = 1;
-    else if (event.code === 'Digit2') weaponKey = 2;
-    else if (event.code === 'Digit3') weaponKey = 3;
-    else if (event.code === 'Digit4') weaponKey = 4;
-    if (FORWARD.has(event.code) || BACK.has(event.code) || LEFT.has(event.code) || RIGHT.has(event.code) || event.code === 'Space') {
-      event.preventDefault();
+  const ONE = {
+    Space: ACTION_CONFIRM, Enter: ACTION_CONFIRM,
+    KeyP: ACTION_PAUSE, Escape: ACTION_PAUSE,
+    KeyE: ACTION_ENTER, KeyM: ACTION_MAP, KeyG: ACTION_SHOP,
+    KeyR: ACTION_RADIO, KeyQ: ACTION_WEAPON, KeyC: ACTION_CAMERA,
+  };
+  window.addEventListener('keydown', (event) => {
+    if (ONE[event.code] !== undefined) {
+      if (!event.repeat) actions |= ONE[event.code];
+      if (event.code === 'Space') event.preventDefault();
+      return;
     }
-  }
-
-  function keyUp(event) {
-    held.delete(event.code);
-  }
-
-  window.addEventListener('keydown', keyDown);
-  window.addEventListener('keyup', keyUp);
-  window.addEventListener('blur', () => held.clear());
-  canvas.addEventListener('pointerdown', () => {
-    actions |= ACT_SHOOT;
+    held.add(event.code);
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   });
+  window.addEventListener('keyup', (event) => { held.delete(event.code); });
+  window.addEventListener('blur', () => { held.clear(); });
+  target.addEventListener('pointerdown', () => { actions |= ACTION_CONFIRM; });
 
-  function has(set) {
-    for (const code of set) if (held.has(code)) return true;
-    return false;
-  }
-
+  const has = (...codes) => codes.some((c) => held.has(c));
   return {
-    // -1 back, 1 forward, 0 neither.
-    throttle() {
-      return (has(FORWARD) ? 1 : 0) - (has(BACK) ? 1 : 0);
-    },
-    // -1 left, 1 right, 0 neither.
-    steer() {
-      return (has(RIGHT) ? 1 : 0) - (has(LEFT) ? 1 : 0);
-    },
-    sprint() {
-      return has(SPRINT);
+    read() {
+      return {
+        fwd: has('KeyW', 'ArrowUp'),
+        back: has('KeyS', 'ArrowDown'),
+        left: has('KeyA', 'ArrowLeft'),
+        right: has('KeyD', 'ArrowRight'),
+        run: has('ShiftLeft', 'ShiftRight'),
+        shoot: has('Space') || false,
+      };
     },
     takeActions() {
       const taken = actions;
       actions = 0;
       return taken;
-    },
-    takeWeapon() {
-      const w = weaponKey;
-      weaponKey = 0;
-      return w;
     },
   };
 }

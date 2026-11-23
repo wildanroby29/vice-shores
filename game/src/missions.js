@@ -1,122 +1,43 @@
-// Rook's story: eight numbered jobs for the fixer Marla. Each job has a beacon in
-// the world, an objective, and a payout. The module tracks progress and reports
-// what the HUD should show.
-import { JOBS } from './config.js';
+// missions.js — the 8 story jobs for fixer Marla, the respect ladder, crew
+// abilities, radio stations and the dialogue lines. Fixer name is Marla
+// everywhere. A mission completes when the hero reaches its marker.
+import { MISSIONS, RANKS, RANK_AT, CREW, RADIO } from './config.js';
 
-export function createMissions(THREE, scene) {
-  // The beacon: a tall golden pillar of light plus a floating diamond marker.
-  const beaconMat = new THREE.MeshBasicMaterial({ color: 0xffd21f, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
-  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 30, 12, 1, true), beaconMat);
-  beacon.position.y = 15;
-  scene.add(beacon);
-  const diamondMat = new THREE.MeshBasicMaterial({ color: 0xffd21f });
-  const diamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.9), diamondMat);
-  diamond.position.y = 4.5;
-  scene.add(diamond);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd21f, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 3.0, 24), ringMat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.12;
-  scene.add(ring);
+export function createMissions() {
+  let index = 0;
+  let completed = 0;
+  let money = 2650;
+  let radioIndex = 0;
+  let activeWeapon = 0; // 0 fists, 1 pistol, 2 SMG
+  const weapons = [
+    { name: 'Fists', ammo: Infinity },
+    { name: 'Pistol', ammo: 48 },
+    { name: 'SMG', ammo: 120 },
+  ];
 
-  let current = 0;
-  let collectCount = 0;
-  let surviveTimer = 0;
-
-  function placeFor(jobIndex) {
-    const job = JOBS[jobIndex];
-    if (!job) return;
-    beacon.position.x = job.target.x;
-    beacon.position.z = job.target.z;
-    diamond.position.x = job.target.x;
-    diamond.position.z = job.target.z;
-    ring.position.x = job.target.x;
-    ring.position.z = job.target.z;
-    beacon.visible = true;
-    diamond.visible = true;
-    ring.visible = true;
+  function current() { return MISSIONS[index]; }
+  function rank() {
+    let r = 0;
+    for (let i = 0; i < RANK_AT.length; i += 1) if (completed >= RANK_AT[i]) r = i;
+    return RANKS[r];
   }
-
-  function hide() {
-    beacon.visible = false;
-    diamond.visible = false;
-    ring.visible = false;
+  function progress() { return `${Math.min(completed + 1, 8)}/8`; }
+  function complete() {
+    const m = MISSIONS[index];
+    money += m.reward;
+    completed += 1;
+    const done = index >= MISSIONS.length - 1;
+    if (!done) index += 1;
+    return { reward: m.reward, done, next: done ? null : MISSIONS[index] };
   }
+  function setMission(i) { index = Math.max(0, Math.min(MISSIONS.length - 1, i)); }
+  function cycleRadio() { radioIndex = (radioIndex + 1) % RADIO.length; return RADIO[radioIndex]; }
+  function radio() { return RADIO[radioIndex]; }
+  function weapon() { return weapons[activeWeapon]; }
+  function cycleWeapon() { activeWeapon = (activeWeapon + 1) % weapons.length; return weapons[activeWeapon]; }
+  function crew() { return CREW; }
 
-  return {
-    get current() { return current; },
-    get collectCount() { return collectCount; },
-    placeFor,
-    hide,
-    start(jobIndex) {
-      current = jobIndex;
-      collectCount = 0;
-      surviveTimer = 0;
-      placeFor(jobIndex);
-    },
-    // Called every step with the player's position and state; returns 'done' |
-    // 'progress' | null. `ctx` carries the live state the job needs.
-    update(dt, t, px, pz, state) {
-      const job = JOBS[current];
-      if (!job) return null;
-      diamond.rotation.y = t * 1.5;
-      diamond.position.y = 4.5 + Math.sin(t * 2) * 0.4;
-      ring.scale.setScalar(1 + Math.sin(t * 3) * 0.12);
-      const dx = px - job.target.x;
-      const dz = pz - job.target.z;
-      const dist = Math.hypot(dx, dz);
-      if (job.kind === 'survive') {
-        surviveTimer += dt;
-        state.jobProgress = Math.min(1, surviveTimer / 60);
-        if (state.wanted >= 4 && surviveTimer >= 60) return 'done';
-        return 'progress';
-      }
-      if (job.kind === 'collect') {
-        // Three drops along the boulevard: the beacon walks to the next drop.
-        if (dist < 4) {
-          collectCount += 1;
-          state.jobProgress = collectCount / 3;
-          if (collectCount >= 3) return 'done';
-          const drops = [{ x: -52, z: -30 }, { x: -52, z: 30 }, { x: -52, z: 60 }];
-          const next = drops[Math.min(collectCount, 2)];
-          beacon.position.x = next.x;
-          beacon.position.z = next.z;
-          diamond.position.x = next.x;
-          diamond.position.z = next.z;
-          ring.position.x = next.x;
-          ring.position.z = next.z;
-          return 'progress';
-        }
-        return null;
-      }
-      if (dist < 4) {
-        state.jobProgress = 1;
-        return 'done';
-      }
-      return null;
-    },
-    complete(state) {
-      const job = JOBS[current];
-      if (!job) return 0;
-      state.jobDone[current] = true;
-      state.money += job.payout;
-      state.respect += 400 + job.payout;
-      current = Math.min(JOBS.length - 1, current + 1);
-      if (current < JOBS.length && !JOBS.slice(0, current).every((_, i) => state.jobDone[i])) {
-        // All jobs done: free roam.
-      }
-      if (state.jobDone.every(Boolean)) {
-        hide();
-        return job.payout;
-      }
-      placeFor(current);
-      return job.payout;
-    },
-    job() {
-      return JOBS[current];
-    },
-    allDone(state) {
-      return state.jobDone.every(Boolean);
-    },
-  };
+  return { current, rank, progress, complete, setMission, cycleRadio, radio, weapon, cycleWeapon, crew,
+    get money() { return money; }, set money(v) { money = v; },
+    get completed() { return completed; }, get index() { return index; } };
 }

@@ -1,132 +1,58 @@
-// Every tuning number, name and colour for Vice Shores in one place. The city is a
-// hand-laid grid: a wide beachfront boulevard runs north-south along the ocean on the
-// west edge, and the street grid fills the land to its east. Units are metres.
-
+// Vice Shores — every tuning number, colour and mission in one place.
+// The city is a ~420x420 m grid: streets on the axes, beach + ocean to the east
+// and south, a pier and marina on the south-east shore. Times are 24 h clock.
 export const STEP = 1 / 60;
+export const SAVE_KEY = 'vice-shores.saves.v1';
+export const BEST_KEY = 'vice-shores.best.v1';
+
 export const WORLD = {
-  // The boulevard's centre line and width; the ocean starts west of it.
-  boulevardX: -52,
-  boulevardHalf: 11,
-  oceanX: -86,
-  beachX: -72,
-  // The city's street grid: roads run at these x and z lines, blocks between them.
-  roadXs: [-36, 0, 36, 72, 108],
-  roadZs: [-72, -36, 0, 36, 72, 108],
-  roadHalf: 5,
-  // Playable bounds.
-  minX: -84,
-  maxX: 132,
-  minZ: -92,
-  maxZ: 128,
-  // The workshop (Dockside Customs) sits at the south end of the boulevard.
-  garage: { x: -52, z: 96, heading: Math.PI },
-  // The safehouse (respawn point) on Palm Row.
-  safehouse: { x: 18, z: 18 },
+  half: 210, // city extends -210..210 on x and z
+  block: 44, // block size
+  street: 16, // street width
+  beachX: 176, // sand starts here, ocean beyond x=210
+  pierZ: 150, // pier runs south from z=150 into the sea
 };
 
-export const PLAYER = {
-  walkSpeed: 7,
-  sprintSpeed: 11,
-  radius: 0.55,
-  height: 1.8,
+// Time-of-day presets used by the screenshot scenes (and the in-game clock).
+export const TOD = {
+  golden: { hour: 17.5, sun: 0xffb36b, sunI: 2.6, hemiI: 0.95, fog: 0xf2a35e, skyTop: 0x2e4a8f, skyMid: 0xe87a4a, skyBot: 0xffb36b },
+  sunset: { hour: 18.8, sun: 0xff8f4d, sunI: 2.2, hemiI: 1.0, fog: 0xe8795a, skyTop: 0x4a5a7a, skyMid: 0xd9553f, skyBot: 0xff9a3d },
+  afternoon: { hour: 16.0, sun: 0xffd9a0, sunI: 2.8, hemiI: 0.68, fog: 0xf0c98f, skyTop: 0x4a7fc1, skyMid: 0xf2b06a, skyBot: 0xffd9a0 },
+  night: { hour: 20.5, sun: 0xc9d6ea, sunI: 0.55, hemiI: 1.0, fog: 0x26262c, skyTop: 0x2a3450, skyMid: 0x3a4a6a, skyBot: 0x5a3040 },
 };
 
-export const CAR = {
-  accel: 22,
-  brake: 34,
-  reverseAccel: 12,
-  maxSpeed: 46,
-  maxReverse: 12,
-  steer: 1.9,
-  grip: 6.5,
-};
+export const PLAYER = { walkSpeed: 6, runSpeed: 10, accel: 26, brake: 42, maxSpeed: 46, turn: 2.1, health: 100, armour: 100 };
 
-// Rook's story: eight numbered jobs for the fixer Marla, from first errand to the
-// final heat. Each job names its target place and pays on completion.
-export const JOBS = [
-  { id: 1, name: 'FIRST GEAR', act: 'ACT I — THE NEW DRIVER', place: 'Kumala Strand', payout: 250, kind: 'drive', target: { x: -52, z: -60 }, blurb: 'Drive to the pier and collect the package.', line: 'New in town, Rook? One package, one pier. Do not make me regret this.' },
-  { id: 2, name: 'PACKAGE RUN', act: 'ACT I — THE NEW DRIVER', place: 'Palm Row', payout: 350, kind: 'steal', target: { x: 0, z: 36 }, blurb: 'Steal the Sunline Cab and deliver it to Palm Row.', line: 'That cab on Palm Row is yours, Rook. Take it — the driver already knows the drill.' },
-  { id: 3, name: 'NEON RUN', act: 'ACT I — THE NEW DRIVER', place: 'Neon Row', payout: 500, kind: 'drive', target: { x: 72, z: -36 }, blurb: 'Outrun the patrols and drop the goods on Neon Row.', line: 'Neon Row is watching. Drive like the whole street is yours — because tonight it is.' },
-  { id: 4, name: 'MARKET SQUEEZE', act: 'ACT II — MARKET SQUEEZE', place: 'Kumala Strand', payout: 650, kind: 'collect', target: { x: -52, z: 0 }, blurb: 'Collect three drops along the boulevard, then vanish.', line: 'Three drops, one boulevard, no witnesses. You are the ghost, Rook.' },
-  { id: 5, name: 'GOLD PAINT', act: 'ACT II — MARKET SQUEEZE', place: 'Dockside Customs', payout: 800, kind: 'garage', target: { x: -52, z: 96 }, blurb: 'Get the GT resprayed sunrise orange at the workshop.', line: 'A sunrise paint job buys you a new face. Park it inside, keep the doors shut.' },
-  { id: 6, name: 'PIER PRESSURE', act: 'ACT II — MARKET SQUEEZE', place: 'The Pier', payout: 1000, kind: 'drive', target: { x: -66, z: -72 }, blurb: 'Meet the boat at the pier and bring the cargo home.', line: 'The boat does not wait, Rook. Neither do I. Bring it home.' },
-  { id: 7, name: 'HEAT WAVE', act: 'ACT II — MARKET SQUEEZE', place: 'Sunset Boulevard', payout: 1200, kind: 'survive', target: { x: -52, z: 36 }, blurb: 'Survive 60 seconds at 4 stars or more.', line: 'Five stars, Rook — and the whole city is watching the boulevard. Do not slow down.' },
-  { id: 8, name: 'KING OF THE SHORE', act: 'ACT III — KING OF THE SHORE', place: 'Vice Shores', payout: 1500, kind: 'drive', target: { x: 108, z: 108 }, blurb: 'One last run across the whole city. Own it.', line: 'Last run, Rook. From the pier to the far corner — make the city remember your name.' },
-];
+export const RANKS = ['NOBODY', 'HUSTLER', 'WHEELMAN', 'FIXER', 'TIDE BOSS'];
+export const RANK_AT = [0, 2, 4, 6, 8]; // missions completed needed
 
-// The crew: three named allies with one ability each, on cooldown.
 export const CREW = [
-  { key: 'Q', name: 'MIRA', ability: 'SWAP PLATES', desc: 'Lose 1 wanted star', cooldown: 45 },
-  { key: 'C', name: 'JAI', ability: 'QUICK FIX', desc: 'Repair the car +35%', cooldown: 40 },
-  { key: 'V', name: 'KIRI', ability: 'EYES OUT', desc: 'Police lose you for 20s', cooldown: 60 },
-];
-
-export const RANKS = ['NOBODY', 'HUSTLER', 'WHEELMAN', 'FIXER', 'BOSS'];
-export const RANK_THRESHOLDS = [0, 800, 2400, 5200, 9000];
-
-export const WEAPONS = [
-  { slot: 1, name: 'FISTS', ammo: Infinity, damage: 25 },
-  { slot: 2, name: 'P9 PISTOL', ammo: 36, damage: 34 },
-  { slot: 3, name: 'SMG', ammo: 90, damage: 18 },
-  { slot: 4, name: 'SHOTGUN', ammo: 12, damage: 70 },
+  { name: 'Marla', role: 'Fixer', ability: 'Hot tip', key: '1' },
+  { name: 'Dex', role: 'Driver', ability: 'Ram boost', key: '2' },
+  { name: 'Lena', role: 'Lookout', ability: 'Cop radar', key: '3' },
 ];
 
 export const RADIO = [
-  { station: 'SHORE FM 98.6', song: 'Neon Tide — Palm Static' },
-  { station: 'VICE WAVE 101.2', song: 'Golden Hour — The Sunliners' },
-  { station: 'BOULEVARD 87.9', song: 'Heat Haze — Marla & the Fixers' },
+  { station: 'VICE FM 98.5', song: 'Sunset Run — The Palms' },
+  { station: 'TIDE 101.2', song: 'Golden Hour — Marla Ray' },
+  { station: 'SHORE 88.1', song: 'Night Drive — Coastline' },
+];
+
+// 8 story jobs for fixer Marla. Each has a target spot in the city and a payoff.
+export const MISSIONS = [
+  { id: 1, name: 'First Light', short: 'Pick up the package on Coral Row', target: [60, -60], reward: 1200, blurb: 'Marla: "One pickup, no questions. Coral Row, blue awning."' },
+  { id: 2, name: 'Heat Wave', short: 'Lose the heat on the boulevard', target: [-60, 60], reward: 1800, blurb: 'Marla: "Cops are on you. Shake them on the boulevard, then come home."' },
+  { id: 3, name: 'The Courier', short: 'Deliver the case to the marina', target: [188, 155], reward: 2400, blurb: 'Marla: "Case goes to the marina. Pier gate, sunset. Don\'t open it."' },
+  { id: 4, name: 'Night Shift', short: 'Collect from the north garage', target: [-120, -120], reward: 3000, blurb: 'Marla: "North garage, bay 3. Keys are under the mat. Be quick."' },
+  { id: 5, name: 'Paper Trail', short: 'Grab the ledger at the bank', target: [-60, -120], reward: 3600, blurb: 'Marla: "The ledger is in the bank vault room. In and out, Rook."' },
+  { id: 6, name: 'High Tide', short: 'Meet the boat at the pier', target: [180, 180], reward: 4200, blurb: 'Marla: "Boat\'s at the pier end. Tide waits for nobody."' },
+  { id: 7, name: 'The Long Way', short: 'Escort Dex across town', target: [120, -60], reward: 5000, blurb: 'Marla: "Dex needs an escort. Keep him breathing till the east gate."' },
+  { id: 8, name: 'Tide Boss', short: 'Take the golden hour job', target: [0, 0], reward: 8000, blurb: 'Marla: "Last one, Rook. The whole city is watching. Make it count."' },
 ];
 
 export const PALETTE = {
-  skyTop: 0x2e6fb0,
-  skyHorizon: 0xffc46b,
-  sun: 0xffd98a,
-  fog: 0xffd9a0,
-  ocean: 0x1f8fb8,
-  beach: 0xe8cf9a,
-  asphalt: 0x3a3f47,
-  sidewalk: 0x9a938a,
-  grass: 0x5da24a,
+  asphalt: 0x44474d, asphaltLine: 0xd8c25a, sidewalk: 0xb9b4a8, sand: 0xe8cf9a,
+  sea: 0x1d6f9a, seaDeep: 0x0f3d5c, grass: 0x4d7a3a,
 };
 
-export const SAVE_KEY = 'vice-shores.save.v1';
-
-// One shared mutable game state object, built by main.js and read by every module.
-export function createState() {
-  return {
-    time: 18.38, // 18:23 on the in-game clock
-    day: 'SUNDAY',
-    money: 500,
-    respect: 0,
-    wanted: 0,
-    wantedHeat: 0,
-    health: 100,
-    armor: 60,
-    jobIndex: 0,
-    jobDone: [false, false, false, false, false, false, false, false],
-    jobProgress: 0,
-    jobTimer: 0,
-    weaponSlot: 1,
-    ammo: { 2: 36, 3: 90, 4: 12 },
-    radioIndex: 0,
-    screen: 'title', // title | play | pause | busted | garage
-    paused: false,
-    busted: false,
-    bustedTimer: 0,
-    garageOpen: false,
-    dialogue: '',
-    dialogueTimer: 0,
-    message: '',
-    messageTimer: 0,
-    crewCooldown: { Q: 0, C: 0, V: 0 },
-    eyesOutTimer: 0,
-    stats: { carsStolen: 0, distance: 0, shotsFired: 0 },
-    player: { x: 18, z: 18, heading: 0, speed: 0, inCar: null, onFoot: true },
-    cameraMode: 0,
-    saveSlots: [
-      { act: 'ACT II — MARKET SQUEEZE', job: 'MARKET SQUEEZE', pct: 32.8, done: 3, total: 6, place: 'Kumala Strand', money: 12650, time: '18:23', rank: 'WHEELMAN' },
-      { act: 'ACT I — NEON RUN', job: 'NEON RUN', pct: 18.5, done: 2, total: 6, place: 'Neon Row', money: 4380, time: '09:41', rank: 'HUSTLER' },
-      null,
-    ],
-  };
-}
+export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
