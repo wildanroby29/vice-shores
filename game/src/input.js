@@ -1,68 +1,115 @@
-// Input: WASD or arrows drive and walk, E enter or steal a car, Space or
-// click shoot, Shift sprint or nitro, C camera, M map, G customs, P pause,
-// R radio, Q weapon. Held keys give movement; one-shot presses are queued
-// as bit flags.
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
-export const ACTION_ENTER = 4;
-export const ACTION_MAP = 8;
-export const ACTION_SHOP = 16;
-export const ACTION_RADIO = 32;
-export const ACTION_WEAPON = 64;
-export const ACTION_CAMERA = 128;
+// Keyboard input for Vice Shores.
+//
+// Two kinds of input live here. Held keys (WASD and the arrows) report a
+// continuous state every frame — the car keeps accelerating while W is down.
+// One-shot presses (E to enter a car, Space to shoot, M for the map and so
+// on) are queued as bit flags: the game reads them once per step and they
+// clear, so a single tap never fires twice. The action constants are shared
+// with the game loop so the two sides can never drift apart.
 
-export function createInput(el) {
-  const keys = new Set();
-  let flags = 0;
-  const MAP = {
-    Space: ACTION_CONFIRM,
-    Enter: ACTION_CONFIRM,
-    KeyP: ACTION_PAUSE,
-    Escape: ACTION_PAUSE,
-    KeyE: ACTION_ENTER,
-    KeyM: ACTION_MAP,
-    KeyG: ACTION_SHOP,
-    KeyR: ACTION_RADIO,
-    KeyQ: ACTION_WEAPON,
-    KeyC: ACTION_CAMERA,
-  };
-  window.addEventListener('keydown', (ev) => {
-    if (MAP[ev.code] !== undefined) {
-      if (!ev.repeat) flags |= MAP[ev.code];
-      if (ev.code === 'Space') ev.preventDefault();
-      return;
+export const ACT = {
+  ENTER: 1,
+  SHOOT: 2,
+  SPRINT: 4,
+  CAMERA: 8,
+  MAP: 16,
+  SHOP: 32,
+  PAUSE: 64,
+  RADIO: 128,
+  WEAPON: 256,
+  CONFIRM: 512,
+};
+
+const PRESS_KEYS = {
+  KeyE: ACT.ENTER,
+  Space: ACT.SHOOT | ACT.CONFIRM,
+  Enter: ACT.CONFIRM,
+  KeyC: ACT.CAMERA,
+  KeyM: ACT.MAP,
+  KeyG: ACT.SHOP,
+  KeyP: ACT.PAUSE,
+  Escape: ACT.PAUSE,
+  KeyR: ACT.RADIO,
+  KeyQ: ACT.WEAPON,
+};
+
+export function createInput() {
+  const held = new Set();
+  let queued = 0;
+  let shiftHeld = false;
+
+  function keyName(e) {
+    return e.code || e.key;
+  }
+
+  function onDown(e) {
+    const code = keyName(e);
+    if (code === 'ShiftLeft' || code === 'ShiftRight') shiftHeld = true;
+    held.add(code);
+    const flag = PRESS_KEYS[code];
+    if (flag) {
+      queued |= flag;
+      e.preventDefault();
     }
-    keys.add(ev.code);
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(ev.code)) {
-      ev.preventDefault();
-    }
-  });
-  window.addEventListener('keyup', (ev) => {
-    keys.delete(ev.code);
-  });
+    if (code === 'Space' || code.startsWith('Arrow')) e.preventDefault();
+  }
+
+  function onUp(e) {
+    const code = keyName(e);
+    if (code === 'ShiftLeft' || code === 'ShiftRight') shiftHeld = false;
+    held.delete(code);
+  }
+
+  window.addEventListener('keydown', onDown);
+  window.addEventListener('keyup', onUp);
   window.addEventListener('blur', () => {
-    keys.clear();
-  });
-  el.addEventListener('pointerdown', () => {
-    flags |= ACTION_CONFIRM;
+    held.clear();
+    shiftHeld = false;
   });
 
-  const isDown = (...codes) => codes.some((c) => keys.has(c));
+  function down(...codes) {
+    return codes.some((c) => held.has(c));
+  }
+
   return {
-    read() {
-      return {
-        fwd: isDown('KeyW', 'ArrowUp'),
-        back: isDown('KeyS', 'ArrowDown'),
-        left: isDown('KeyA', 'ArrowLeft'),
-        right: isDown('KeyD', 'ArrowRight'),
-        run: isDown('ShiftLeft', 'ShiftRight'),
-        shoot: isDown('Space') || false,
-      };
+    // Continuous movement state, read every frame.
+    get forward() {
+      return down('KeyW', 'ArrowUp') ? 1 : down('KeyS', 'ArrowDown') ? -1 : 0;
     },
-    takeActions() {
-      const taken = flags;
-      flags = 0;
-      return taken;
+    get steer() {
+      return down('KeyA', 'ArrowLeft') ? -1 : down('KeyD', 'ArrowRight') ? 1 : 0;
     },
+    get sprint() {
+      return shiftHeld;
+    },
+    // One-shot flags, consumed once per step.
+    takePressed() {
+      const out = queued;
+      queued = 0;
+      return out;
+    },
+    peekPressed() {
+      return queued;
+    },
+    detach() {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+    },
+  };
+}
+
+// A scripted input for the staged screenshots: forward only, or nothing.
+export function scriptedInput(kind) {
+  if (kind === 'DRIVE') {
+    return {
+      forward: 1, steer: 0, sprint: false,
+      takePressed() { return 0; },
+      peekPressed() { return 0; },
+    };
+  }
+  return {
+    forward: 0, steer: 0, sprint: false,
+    takePressed() { return 0; },
+    peekPressed() { return 0; },
   };
 }

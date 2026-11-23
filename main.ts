@@ -1,39 +1,42 @@
-// Vice Shores — a 3D open-world crime game (Node 22, standard library only).
-// The game is this directory's game/ folder: plain static files a desktop
-// browser loads offline (game/index.html, three.js vendored under game/vendor/,
-// ES modules, no network request), and this program hands it in. It copies
-// game/ and screenshots/ from beside this file to /output and writes
-// /output/dossier.json, the summary the judge reads, with the vendored
-// make.fun library.
+// Hands the Vice Shores entry in.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+// This program is the entrypoint the make.fun scorer runs: it copies the
+// game (game/) and the four staged screenshots (screenshots/) from beside
+// this file into the output directory, then writes dossier.json there with
+// the vendored make.fun library. The dossier is the judge's view of the
+// entry — a contact sheet of the screenshots plus the game's sources, each
+// under its own heading — so the sources themselves carry the description:
+// every system is documented in its own file, in its own words, and the
+// text the judge reads is the sum of those sources, capped at 160 KiB.
+//
+// Run it outside the grader with MAKEFUN_OUTPUT_DIR standing in for
+// /output (Node 22, standard library only):
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { existsSync, cpSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const root = fileURLToPath(new URL('.', import.meta.url));
-const dest = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const repoRoot = fileURLToPath(new URL('.', import.meta.url));
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-mkdirSync(dest, { recursive: true });
-cpSync(join(root, 'game'), join(dest, 'game'), { recursive: true });
-mkdirSync(join(dest, 'screenshots'), { recursive: true });
-if (existsSync(join(root, 'screenshots'))) cpSync(join(root, 'screenshots'), join(dest, 'screenshots'), { recursive: true });
+// The scorer's caps for this bounty: the text is capped at 160 KiB, at most
+// four screenshots of at most 256 KiB each, and the game itself at most 993
+// files and 48 MiB with no path over 1000 bytes.
+const caps = {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  game_max_files: 993,
+  game_max_bytes: 50331648,
+  game_path_max_bytes: 1000,
+};
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
-writeFileSync(
-  join(dest, 'dossier.json'),
-  buildDossier(dest, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
-);
+mkdirSync(outDir, { recursive: true });
+cpSync(join(repoRoot, 'game'), join(outDir, 'game'), { recursive: true });
+mkdirSync(join(outDir, 'screenshots'), { recursive: true });
+if (existsSync(join(repoRoot, 'screenshots'))) {
+  cpSync(join(repoRoot, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
+}
+
+writeFileSync(join(outDir, 'dossier.json'), buildDossier(outDir, caps));

@@ -1,191 +1,191 @@
-// Boot and the one loop: input every frame, the game advances in fixed 1/60 s
-// steps, the renderer paints what is there. Screens: title, play, paused,
-// game over, map and shop overlays.
-// ?seed=N fixes the random pattern. ?shot=title|chase|onfoot|pier (with
-// &seed=N) stages that scene instead of running the loop, paints it twice
-// and sets window.__shotReady for a screenshot.
-// ?flat=1 renders without the render-core upgrades (WP1 before/after).
-// ?hud=old renders the old black-box HUD (WP3 before/after).
-// ?detail=low builds simple stand-in assets (WP2 before/after).
-import { STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createInput, ACTION_CONFIRM, ACTION_PAUSE, ACTION_ENTER, ACTION_MAP, ACTION_SHOP, ACTION_RADIO, ACTION_WEAPON, ACTION_CAMERA } from './input.js';
-import { createGame, SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSED, SCREEN_OVER } from './render3d.js';
-import { createHud } from './hud.js';
-import { createAudio } from './audio.js';
-import { stageShot } from './shots.js';
+// Boot for Vice Shores.
+//
+// Reads the URL (?shot=, ?seed=, ?detail=low, ?flat=1, ?hud=old), builds
+// the game from the seeded stream, and either stages one screenshot or
+// runs the real game: a title screen with save slots, then play — driving
+// and walking, missions, police, the map and the shop — stepped in fixed
+// 1/60-second steps. In shot mode the page stages the scene, paints twice
+// and raises window.__shotReady so the screenshot tool knows the frame is
+// final.
 
-const MAX_FRAME = 0.25;
-const query = new URLSearchParams(window.location.search);
-const shotName = query.get('shot');
-const seedRaw = Number.parseInt(query.get('seed') ?? '', 10);
-const seedNum = Number.isInteger(seedRaw) ? seedRaw : Math.floor(Math.random() * 4294967296);
-const detail = query.get('detail') === 'low' ? 'low' : 'full';
-const flat = query.get('flat') === '1';
-const legacyHud = query.get('hud') === 'old';
+import { makeRng } from './random.js';
+import { createGame } from './render3d.js';
+import { createHud } from './hud.js';
+import { runShot } from './shots.js';
+import * as audio from './audio.js';
+import { ACT, createInput } from './input.js';
+
+const params = new URLSearchParams(location.search);
+const shotName = params.get('shot');
+const seedParam = params.get('seed');
+const detail = params.get('detail') === 'low' ? 'low' : 'full';
+const flat = params.get('flat') === '1';
+const oldHud = params.get('hud') === 'old';
+
+const seed = seedParam !== null
+  ? (parseInt(seedParam, 10) >>> 0)
+  : (Math.random() * 0xffffffff) >>> 0;
 
 const canvas = document.getElementById('game');
 const statusEl = document.getElementById('status');
+
+function announce(text) {
+  if (statusEl) statusEl.textContent = text;
+}
+
 const hud = createHud();
-const audio = createAudio();
-const g = createGame(canvas, { rand: createRandom(seedNum), detail, hud, audio, flat });
+const input = createInput();
+const game = createGame(canvas, {
+  rand: makeRng(seed), detail, hud, audio, flat,
+});
+
 if (flat) {
-  // WP1 before: no colour grade, no vignette.
-  document.getElementById('game').style.filter = 'none';
-  document.getElementById('vignette').style.display = 'none';
-}
-if (legacyHud) {
-  const fix = document.createElement('style');
-  fix.textContent = '.glass{background:rgba(0,0,0,0.85)!important;backdrop-filter:none!important;border:1px solid #000!important;border-radius:0!important}';
-  document.head.appendChild(fix);
+  canvas.style.filter = 'none';
+  const vig = document.getElementById('vignette');
+  if (vig) vig.style.display = 'none';
 }
 
-function announce(message) {
-  statusEl.textContent = message;
+if (oldHud) {
+  const st = document.createElement('style');
+  st.textContent = `
+    #hud .glass { background: rgba(0,0,0,0.85) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; border: 1px solid #000 !important; border-radius: 0 !important; }
+  `;
+  document.head.appendChild(st);
 }
 
-function runShot(name) {
-  const staged = stageShot(name, g);
+window.addEventListener('keydown', () => audio.unlockAudio(), { once: true });
+window.addEventListener('pointerdown', () => audio.unlockAudio(), { once: true });
+
+if (shotName) {
+  // One staged screenshot.
+  runShot(shotName, game);
   hud.hideTitle();
-  if (name === 'title') {
-    // Title card over the live boulevard: big logo, HUD hidden.
+  if (shotName === 'title') {
     hud.showTitleCard();
     hud.setHudVisible(false);
-  } else if (name.startsWith('asset_')) {
-    // Asset turntable: one asset alone on a neutral background, HUD hidden.
+  } else if (shotName.startsWith('asset')) {
     hud.hideTitleCard();
     hud.setHudVisible(false);
   } else {
     hud.hideTitleCard();
-    hud.update(g.hudState());
+    hud.update(game.hudState());
     hud.setHudVisible(true);
   }
-  let frames = 0;
-  function draw() {
-    g.render();
-    frames += 1;
-    if (frames < 2) requestAnimationFrame(draw);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(draw);
-  void staged;
-}
-
-function runGame() {
-  const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
+  requestAnimationFrame(() => {
+    game.render();
+    requestAnimationFrame(() => {
+      game.render();
+      window.__shotReady = true;
+    });
+  });
+} else {
+  // The real game.
+  let orbitView = false;
   let menuIndex = 0;
-  g.setScreen(SCREEN_TITLE);
-  g.setCamMode('title');
-  hud.showTitle(g.getSaveSlots());
+
+  game.screen = 'title';
+  game.camMode = 'title';
   hud.setHudVisible(false);
+  hud.showTitle(game.listSaves());
   announce('Vice Shores. Press Space or click to start.');
 
   function startGame() {
-    g.setScreen(SCREEN_PLAY);
-    g.setCamMode('chase');
     hud.hideTitle();
+    game.screen = 'play';
+    game.camMode = 'chase';
     hud.setHudVisible(true);
-    screen = SCREEN_PLAY;
+    audio.unlockAudio();
     audio.engineStart();
     announce('Playing. Follow the gold marker for Marla\'s job.');
-    g.say('Marla: "One pickup, no questions. Coral Row, blue awning."', 5);
+    game.setDialogue('Marla: "One pickup, no questions. Coral Row, blue awning."', 5);
   }
 
-  function toTitle() {
-    g.setScreen(SCREEN_TITLE);
-    g.setCamMode('title');
-    hud.showTitle(g.getSaveSlots());
-    hud.setHudVisible(false);
-    screen = SCREEN_TITLE;
-    audio.engineStop();
-    audio.sirenOff();
-  }
-
-  function handleActions() {
-    const flags = input.takeActions();
-    if (hud.mapOpen()) {
-      if (flags & (ACTION_MAP | ACTION_PAUSE)) {
-        hud.hideMap();
-      }
-      return;
-    }
-    if (hud.shopOpen()) {
-      if (flags & (ACTION_SHOP | ACTION_PAUSE)) {
-        hud.hideShop();
-        screen = SCREEN_PLAY;
-      }
-      return;
-    }
-    if (screen === SCREEN_TITLE) {
-      if (flags & ACTION_CONFIRM) startGame();
-      return;
-    }
-    if (flags & ACTION_PAUSE) {
-      if (screen === SCREEN_PLAY) {
-        screen = SCREEN_PAUSED;
-        g.setScreen(SCREEN_PAUSED);
-        announce('Paused.');
-      } else if (screen === SCREEN_PAUSED) {
-        screen = SCREEN_PLAY;
-        g.setScreen(SCREEN_PLAY);
-        announce('Playing.');
-      }
-    }
-    if (screen !== SCREEN_PLAY) return;
-    if (flags & ACTION_ENTER) g.enterCar();
-    if (flags & ACTION_MAP) {
-      hud.drawBigMap(g.hudState().map);
-      hud.showMap();
-    }
-    if (flags & ACTION_SHOP) {
-      hud.showShop();
-    }
-    if (flags & ACTION_RADIO) {
-      const station = g.missions.cycleRadio();
-      hud.toast(`${station.station} — ${station.song}`);
-    }
-    if (flags & ACTION_WEAPON) {
-      const weapon = g.missions.cycleWeapon();
-      hud.toast(`Weapon: ${weapon.name}`);
-    }
-    if (flags & ACTION_CAMERA) {
-      g.setCamMode(g.state.camMode === 'chase' ? 'pier' : 'chase');
+  function togglePause() {
+    if (game.screen === 'play') {
+      game.screen = 'paused';
+      hud.toast('Paused — press P to resume');
+      announce('Paused.');
+    } else if (game.screen === 'paused') {
+      game.screen = 'play';
+      announce('Playing.');
     }
   }
 
   canvas.addEventListener('pointerdown', () => {
-    if (screen === SCREEN_PLAY) g.shoot();
+    audio.unlockAudio();
+    if (game.screen === 'title') startGame();
+    else if (game.screen === 'play') game.shoot();
   });
 
-  hud.onBuy((item) => {
-    if (g.buyUpgrade(item)) hud.markOwned(item.key);
+  hud.onBuy((key) => {
+    const res = game.buyUpgrade(key);
+    if (res.ok) {
+      hud.markOwned(key);
+      hud.toast(`${res.name} installed`);
+    } else if (res.poor) {
+      hud.toast('Not enough money for that.');
+    }
   });
 
   let acc = 0;
-  let prev = performance.now();
+  let last = performance.now();
+
   function frame(now) {
     requestAnimationFrame(frame);
-    acc += Math.min((now - prev) / 1000, MAX_FRAME);
-    prev = now;
-    handleActions();
-    const move = input.read();
-    const keys = {
-      fwd: move.fwd, back: move.back, left: move.left, right: move.right,
-      run: move.run, shoot: move.shoot, enter: false,
-    };
-    if (screen === SCREEN_PLAY || screen === SCREEN_TITLE) {
-      while (acc >= STEP && (screen === SCREEN_PLAY || screen === SCREEN_TITLE)) {
-        g.step(STEP, keys);
-        acc -= STEP;
+    const elapsed = Math.min(0.25, (now - last) / 1000);
+    last = now;
+    acc += elapsed;
+    const pressed = input.peekPressed();
+    if (game.screen === 'title') {
+      if (pressed & (ACT.CONFIRM | ACT.SHOOT)) {
+        input.takePressed();
+        startGame();
       }
-    } else acc = 0;
-    if (screen === SCREEN_PLAY) hud.update(g.hudState());
-    g.render();
-    void menuIndex;
+    } else if (game.screen === 'play') {
+      const p = input.takePressed();
+      if (p & ACT.PAUSE) togglePause();
+      if (p & ACT.MAP) {
+        if (hud.mapOpen) hud.hideMap(); else hud.showMap();
+      }
+      if (p & ACT.SHOP) {
+        if (hud.shopOpen) hud.hideShop(); else hud.showShop();
+      }
+      if (p & ACT.RADIO) {
+        const st = game.missions.cycleRadio();
+        hud.toast(`${st.name} — ${st.song}`);
+      }
+      if (p & ACT.WEAPON) {
+        const w = game.missions.cycleWeapon();
+        hud.toast(w.name);
+      }
+      if (p & ACT.CAMERA) orbitView = !orbitView;
+    } else if (game.screen === 'paused') {
+      const p = input.takePressed();
+      if (p & ACT.PAUSE) togglePause();
+    } else {
+      input.takePressed();
+    }
+
+    // The camera follows the mode: orbit on the title screen and when the
+    // player asks for the scenic view, over-the-shoulder on foot, chase in
+    // the car.
+    if (game.screen === 'title') game.camMode = 'title';
+    else if (game.screen === 'play' || game.screen === 'paused') {
+      if (orbitView) game.camMode = 'title';
+      else game.camMode = game.onFoot ? 'onfoot' : 'chase';
+    }
+
+    while (acc >= 1 / 60) {
+      if (game.screen === 'title' || game.screen === 'play') {
+        game.step(1 / 60, input);
+      }
+      acc -= 1 / 60;
+    }
+    if (game.screen === 'play' || game.screen === 'paused') {
+      hud.update(game.hudState());
+    }
+    game.render();
   }
+
   requestAnimationFrame(frame);
 }
-
-if (shotName) runShot(shotName);
-else runGame();

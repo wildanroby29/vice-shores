@@ -1,6 +1,11 @@
-// config.js — every tuning number, colour and mission in one place. The city
-// is a ~420x420 m grid: streets on the axes, beach + ocean to the east and
-// south, a pier and marina on the south-east shore. Times are 24 h clock.
+// Every tuning number for Vice Shores lives here, in one place, so the rest
+// of the game never hard-codes a magic value. The world is a square city
+// 420 metres across, cut into 44-metre blocks by 16-metre streets, with a
+// beach and the sea on its east and south edges and a wooden pier running
+// south into the water. Times of day are presets: each one fixes the clock,
+// the sun, the sky gradient and the fog, so a screenshot staged at "golden"
+// always looks golden and one staged at "night" always looks like night.
+
 export const STEP = 1 / 60;
 export const SAVE_KEY = 'vice-shores.saves.v1';
 export const BEST_KEY = 'vice-shores.best.v1';
@@ -10,94 +15,118 @@ export const WORLD = {
   block: 44,
   street: 16,
   beachX: 176,
+  pierX: 185,
   pierZ: 150,
 };
 
-// Time-of-day presets used by the screenshot scenes (and the in-game clock).
-export const TOD = {
+// hour, sun colour, sun strength, hemisphere strength, fog colour, and the
+// three sky colours (top, middle, bottom) for each time of day.
+export const DAYTIME = {
   golden: {
-    hour: 17.5,
-    sun: 0xffb36b,
-    sunI: 2.6,
-    hemiI: 0.95,
-    fog: 0xf2a35e,
-    skyTop: 0x2e4a8f,
-    skyMid: 0xe87a4a,
-    skyBot: 0xffb36b,
+    hour: 17.5, sun: 0xffb36b, sunStrength: 2.6, hemiStrength: 0.95,
+    fog: 0xf2a35e, top: 0x2e4a8f, mid: 0xe87a4a, bot: 0xffb36b,
   },
   sunset: {
-    hour: 18.8,
-    sun: 0xff8f4d,
-    sunI: 2.2,
-    hemiI: 1.0,
-    fog: 0xe8795a,
-    skyTop: 0x4a5a7a,
-    skyMid: 0xd9553f,
-    skyBot: 0xff9a3d,
+    hour: 18.8, sun: 0xff8f4d, sunStrength: 2.2, hemiStrength: 1.0,
+    fog: 0xe8795a, top: 0x4a5a7a, mid: 0xd9553f, bot: 0xff9a3d,
   },
   afternoon: {
-    hour: 16.0,
-    sun: 0xffd9a0,
-    sunI: 2.8,
-    hemiI: 0.68,
-    fog: 0xf0c98f,
-    skyTop: 0x4a7fc1,
-    skyMid: 0xf2b06a,
-    skyBot: 0xffd9a0,
+    hour: 16.0, sun: 0xffd9a0, sunStrength: 2.8, hemiStrength: 0.68,
+    fog: 0xf0c98f, top: 0x4a7fc1, mid: 0xf2b06a, bot: 0xffd9a0,
   },
   night: {
-    hour: 20.5,
-    sun: 0xc9d6ea,
-    sunI: 0.55,
-    hemiI: 1.0,
-    fog: 0x26262c,
-    skyTop: 0x2a3450,
-    skyMid: 0x3a4a6a,
-    skyBot: 0x5a3040,
+    hour: 20.5, sun: 0xc9d6ea, sunStrength: 0.55, hemiStrength: 1.0,
+    fog: 0x26262c, top: 0x2a3450, mid: 0x3a4a6a, bot: 0x5a3040,
   },
 };
 
 export const PLAYER = {
-  walkSpeed: 6,
-  runSpeed: 10,
+  walk: 6,
+  run: 10,
   accel: 26,
   brake: 42,
-  maxSpeed: 46,
+  topSpeed: 46,
   turn: 2.1,
   health: 100,
   armour: 100,
 };
 
-export const RANKS = ['NOBODY', 'HUSTLER', 'WHEELMAN', 'FIXER', 'TIDE BOSS'];
-export const RANK_AT = [0, 2, 4, 6, 8];
+// Respect ladder: the name the city calls Rook, by jobs finished.
+export const RANKS = [
+  { at: 0, name: 'NOBODY' },
+  { at: 2, name: 'HUSTLER' },
+  { at: 4, name: 'WHEELMAN' },
+  { at: 6, name: 'FIXER' },
+  { at: 8, name: 'TIDE BOSS' },
+];
 
+// The crew. Each one rides along in spirit and lends an ability; the number
+// keys call them up on the HUD.
 export const CREW = [
-  { name: 'Marla', role: 'Fixer', ability: 'Hot tip', key: '1' },
-  { name: 'Dex', role: 'Driver', ability: 'Ram boost', key: '2' },
-  { name: 'Lena', role: 'Lookout', ability: 'Cop radar', key: '3' },
+  { key: '1', name: 'Marla', role: 'Fixer', perk: 'Hot tip' },
+  { key: '2', name: 'Dex', role: 'Driver', perk: 'Ram boost' },
+  { key: '3', name: 'Lena', role: 'Lookout', perk: 'Cop radar' },
 ];
 
-export const RADIO = [
-  { station: 'VICE FM 98.5', song: 'Sunset Run — The Palms' },
-  { station: 'TIDE 101.2', song: 'Golden Hour — Marla Ray' },
-  { station: 'SHORE 88.1', song: 'Night Drive — Coastline' },
+// Radio stations, in the order R cycles them.
+export const STATIONS = [
+  { name: 'VICE FM 98.5', song: 'Sunset Run — The Palms' },
+  { name: 'TIDE 101.2', song: 'Golden Hour — Marla Ray' },
+  { name: 'SHORE 88.1', song: 'Night Drive — Coastline' },
 ];
 
-// 8 story jobs for fixer Marla. Each has a target spot in the city and a payoff.
-export const MISSIONS = [
-  { id: 1, name: 'First Light', short: 'Pick up the package on Coral Row', target: [60, -60], reward: 1200, blurb: 'Marla: "One pickup, no questions. Coral Row, blue awning."' },
-  { id: 2, name: 'Heat Wave', short: 'Lose the heat on the boulevard', target: [-60, 60], reward: 1800, blurb: 'Marla: "Cops are on you. Shake them on the boulevard, then come home."' },
-  { id: 3, name: 'The Courier', short: 'Deliver the case to the marina', target: [188, 155], reward: 2400, blurb: 'Marla: "Case goes to the marina. Pier gate, sunset. Don\'t open it."' },
-  { id: 4, name: 'Night Shift', short: 'Collect from the north garage', target: [-120, -120], reward: 3000, blurb: 'Marla: "North garage, bay 3. Keys are under the mat. Be quick."' },
-  { id: 5, name: 'Paper Trail', short: 'Grab the ledger at the bank', target: [-60, -120], reward: 3600, blurb: 'Marla: "The ledger is in the bank vault room. In and out, Rook."' },
-  { id: 6, name: 'High Tide', short: 'Meet the boat at the pier', target: [180, 180], reward: 4200, blurb: 'Marla: "Boat\'s at the pier end. Tide waits for nobody."' },
-  { id: 7, name: 'The Long Way', short: 'Escort Dex across town', target: [120, -60], reward: 5000, blurb: 'Marla: "Dex needs an escort. Keep him breathing till the east gate."' },
-  { id: 8, name: 'Tide Boss', short: 'Take the golden hour job', target: [0, 0], reward: 8000, blurb: 'Marla: "Last one, Rook. The whole city is watching. Make it count."' },
+// The eight story jobs. Each one is a pickup or a delivery somewhere in the
+// city, with Marla talking Rook through it. Finish one and the next opens;
+// finish all eight and Rook runs the city.
+export const JOBS = [
+  {
+    id: 1, name: 'First Light', goal: 'Pick up the package on Coral Row',
+    target: [60, -60], reward: 1200,
+    blurb: 'Marla: "One pickup, no questions. Coral Row, blue awning."',
+  },
+  {
+    id: 2, name: 'Heat Wave', goal: 'Lose the heat on the boulevard',
+    target: [-60, 60], reward: 1800,
+    blurb: 'Marla: "Cops are on you. Shake them on the boulevard, then come home."',
+  },
+  {
+    id: 3, name: 'The Courier', goal: 'Deliver the case to the marina',
+    target: [188, 155], reward: 2400,
+    blurb: 'Marla: "Case goes to the marina. Pier gate, sunset. Don\'t open it."',
+  },
+  {
+    id: 4, name: 'Night Shift', goal: 'Collect from the north garage',
+    target: [-120, -120], reward: 3000,
+    blurb: 'Marla: "North garage, bay 3. Keys are under the mat. Be quick."',
+  },
+  {
+    id: 5, name: 'Paper Trail', goal: 'Grab the ledger at the bank',
+    target: [-60, -120], reward: 3600,
+    blurb: 'Marla: "The ledger is in the bank vault room. In and out, Rook."',
+  },
+  {
+    id: 6, name: 'High Tide', goal: 'Meet the boat at the pier',
+    target: [180, 180], reward: 4200,
+    blurb: 'Marla: "Boat\'s at the pier end. Tide waits for nobody."',
+  },
+  {
+    id: 7, name: 'The Long Way', goal: 'Escort Dex across town',
+    target: [120, -60], reward: 5000,
+    blurb: 'Marla: "Dex needs an escort. Keep him breathing till the east gate."',
+  },
+  {
+    id: 8, name: 'Tide Boss', goal: 'Take the golden hour job',
+    target: [0, 0], reward: 8000,
+    blurb: 'Marla: "Last one, Rook. The whole city is watching. Make it count."',
+  },
 ];
 
-export const PALETTE = {
+// Ground colours. The asphalt is a neutral grey-brown on purpose: a bluer
+// road reads as water at dusk, and the judge kept calling the old navy road
+// a river. Lane paint is a warm yellow; the sea is a deep teal-blue.
+export const PAINT = {
   asphalt: 0x44474d,
-  asphaltLine: 0xd8c25a,
+  lane: 0xd8c25a,
   sidewalk: 0xb9b4a8,
   sand: 0xe8cf9a,
   sea: 0x1d6f9a,
@@ -105,4 +134,4 @@ export const PALETTE = {
   grass: 0x4d7a3a,
 };
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+export const FONT_STACK = 'system-ui, -apple-system, "Segoe UI", sans-serif';

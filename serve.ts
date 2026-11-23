@@ -1,19 +1,20 @@
-// A tiny static server for game/ (Node 22, standard library only), so an entry can be played
-// locally without a build step: `node serve.ts` serves game/ on http://localhost:8080.
-// It sends the MIME types a browser game needs, refuses any path outside game/, and otherwise
-// does nothing clever: this is a development convenience, not a web server for the internet.
-import { createReadStream, statSync } from 'node:fs';
+// A tiny static server for playing Vice Shores locally.
+//
+// Serves the game/ folder on port 8080 (or --port N) from this directory,
+// nothing else: any path that climbs out of game/ is refused, missing files
+// are 404, and nothing is cached, so a rebuild shows up on the next reload.
+// Node standard library only — no dependencies, no build step.
+
 import { createServer } from 'node:http';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = resolve(fileURLToPath(new URL('./game', import.meta.url)));
-const args = process.argv.slice(2);
-const portIndex = args.indexOf('--port');
-const requested = portIndex === -1 ? 8080 : Number(args[portIndex + 1]);
-const port = Number.isInteger(requested) && requested > 0 && requested < 65536 ? requested : 8080;
+const here = fileURLToPath(new URL('.', import.meta.url));
+const root = resolve(join(here, 'game'));
+const port = Number(process.argv.find((a) => a.startsWith('--port='))?.split('=')[1] ?? 8080);
 
-const MIME: Record<string, string> = {
+const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
@@ -37,36 +38,29 @@ const MIME: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-createServer((request, response) => {
-  const url = new URL(request.url ?? '/', 'http://localhost');
-  let pathname: string;
+const server = createServer(async (req, res) => {
   try {
-    pathname = decodeURIComponent(url.pathname);
-  } catch {
-    response.writeHead(400).end('bad request');
-    return;
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    let path = decodeURIComponent(url.pathname);
+    if (path === '/') path = '/index.html';
+    const file = resolve(join(root, path));
+    if (!file.startsWith(root + sep)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden: outside game/');
+      return;
+    }
+    const body = await readFile(file);
+    res.writeHead(200, {
+      'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
+      'Cache-Control': 'no-store',
+    });
+    res.end(body);
+  } catch (e) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not found');
   }
-  if (pathname.endsWith('/')) pathname += 'index.html';
-  const file = resolve(join(root, normalize(pathname)));
-  if (file !== root && !file.startsWith(root + sep)) {
-    response.writeHead(403).end('forbidden');
-    return;
-  }
-  let size: number;
-  try {
-    const stats = statSync(file);
-    if (!stats.isFile()) throw new Error('not a file');
-    size = stats.size;
-  } catch {
-    response.writeHead(404).end('not found');
-    return;
-  }
-  response.writeHead(200, {
-    'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
-    'content-length': size,
-    'cache-control': 'no-store',
-  });
-  createReadStream(file).pipe(response);
-}).listen(port, '127.0.0.1', () => {
+});
+
+server.listen(port, '127.0.0.1', () => {
   console.log(`game/ is on http://localhost:${port}`);
 });

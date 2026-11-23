@@ -1,276 +1,389 @@
-// police.js — the wanted system: police cars that chase, ram and flank, a
-// helicopter with a tapered body, spinning rotor with motion-blur disc, a
-// spotlight cone and a bright ground circle, plus roadblocks and the
-// dispatch ticker data (unit name, distance, tactic).
-import { makePoliceCar } from './vehicles.js';
+// The police for Vice Shores: patrol cars, officers, roadblocks, and the
+// searchlight helicopter.
+//
+// The helicopter is the city's eye in the sky. Its body is white with
+// black stripes (Tem's change — the steel blue-grey is gone), a glass
+// canopy, a spinning main rotor with a translucent blur disc, a tail rotor,
+// skids, navigation lights and a double-blinking strobe, and a volumetric
+// searchlight cone with a pool of light on the ground under it. The beam is
+// deliberately dimmed: the old bright beam blew the hero's roof white.
+// Police cars steer toward the hero, drive when the wanted level is up, and
+// flash their light bars out of phase with each other.
+
+import { makePoliceCar, flashPolice } from './vehicles.js';
 import { makePerson } from './people.js';
 
-const TACTICS = ['RAMMING', 'FLANKING', 'PIT', 'ROADBLOCK', 'SPOTLIGHT', 'PURSUIT'];
-const UNIT_NAMES = ['UNIT 7', 'UNIT 12', 'UNIT 4', 'UNIT 21', 'UNIT 9', 'UNIT 15'];
+export const TACTICS = ['RAMMING', 'FLANKING', 'PIT', 'ROADBLOCK', 'SPOTLIGHT', 'PURSUIT'];
+export const UNIT_NAMES = ['UNIT 7', 'UNIT 12', 'UNIT 4', 'UNIT 21', 'UNIT 9', 'UNIT 15'];
 
-export function createHelicopter(scn, level) {
-  const grp = new THREE.Group();
-  if (level === 'low') {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.4, 1.6), new THREE.MeshStandardMaterial({ color: 0x2a2a3a }));
-    grp.add(body);
-    return { group: grp, rotor: null, beam: null, pool: null, update() {} };
-  }
-  // Fresh fuselage: an extruded side profile (nose at +Z after the
-  // rotate, so group.lookAt points the nose at the target), tapered from a
-  // roomy cabin to a slim tail — a distinct silhouette, not an ellipsoid.
-  // WHITE body with a BLACK cheatline (Tem 23:08 WIB — was steel blue-grey
-  // 0x6b7a8f with a white belly stripe); the white reads clearly against
-  // the night sky and the black stripe + black tail fin keep it defined.
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.4 });
-  function extrudeProfile(pts, beam, bevel, material) {
-    const outline = new THREE.Shape();
-    outline.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i += 1) outline.lineTo(pts[i][0], pts[i][1]);
-    outline.closePath();
-    const depth = Math.max(0.05, beam - bevel * 2);
-    const form = new THREE.ExtrudeGeometry(outline, {
-      depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, steps: 1,
-    });
-    form.rotateY(-Math.PI / 2);
-    form.translate(depth / 2, 0, 0);
-    form.computeVertexNormals();
-    const part = new THREE.Mesh(form, material);
-    part.castShadow = true;
-    return part;
-  }
-  const body = extrudeProfile(
-    [[2.6, -0.4], [2.7, 0.2], [2.0, 0.9], [0.6, 1.1], [-1.4, 1.0], [-2.4, 0.4], [-2.5, -0.3], [-1.2, -0.8], [1.0, -0.9]],
-    1.9, 0.12, bodyMat,
+// Build a 2D side-profile shape, extrude it across a width, and rotate it
+// so the profile's length lands on +Z (front) and the extrusion on X.
+function extrudeProfile(points, width, bevel) {
+  const shape = new THREE.Shape();
+  shape.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1]);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: width, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
+    bevelSegments: 1, steps: 1,
+  });
+  geo.translate(0, 0, -width / 2);
+  geo.rotateY(-Math.PI / 2);
+  return geo;
+}
+
+function radialTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const BEAM_VERT = `
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+  vUv = uv;
+  vNormal = normalize(normalMatrix * normal);
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vView = normalize(-mv.xyz);
+  gl_Position = projectionMatrix * mv;
+}
+`;
+
+const BEAM_FRAG = `
+uniform vec3 uColor;
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+  float along = pow(vUv.y, 1.5);
+  float edge = abs(dot(normalize(vNormal), normalize(vView)));
+  float a = 0.2 * along * edge;
+  gl_FragColor = vec4(uColor, a);
+}
+`;
+
+// The helicopter. White body, black cheatline and tail fin, glass canopy,
+// tail boom and rotor, skids, main rotor with a blur disc, a volumetric
+// searchlight, rim light, and red/green/white navigation lights.
+export function createHelicopter(scene) {
+  const group = new THREE.Group();
+  // White body — Tem's change (23:08 WIB). The old steel blue-grey is gone.
+  const bodyMat = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, roughness: 0.4, metalness: 0.4,
+  });
+  const fuselage = new THREE.Mesh(
+    extrudeProfile(
+      [[2.6, -0.4], [2.7, 0.2], [2.0, 0.9], [0.6, 1.1], [-1.4, 1.0], [-2.4, 0.4], [-2.5, -0.3], [-1.2, -0.8], [1.0, -0.9]],
+      1.9, 0.12,
+    ),
+    bodyMat,
   );
-  grp.add(body);
-  const stripe = extrudeProfile(
-    [[2.55, -0.15], [2.6, 0.15], [-2.35, 0.15], [-2.4, -0.15]],
-    1.96, 0.04, new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 }),
+  fuselage.castShadow = true;
+  group.add(fuselage);
+
+  // Black cheatline along the fuselage, slightly wider than the body.
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
+  const cheatline = new THREE.Mesh(
+    extrudeProfile(
+      [[2.55, -0.15], [2.6, 0.15], [-2.35, 0.15], [-2.4, -0.15]],
+      1.96, 0.04,
+    ),
+    stripeMat,
   );
-  grp.add(stripe);
-  // Glass canopy: a sloped wedge over the nose, dark and glossy.
-  const canopy = extrudeProfile(
-    [[2.5, -0.3], [2.35, 0.7], [1.0, 1.0], [1.0, -0.3]],
-    1.6, 0.06, new THREE.MeshPhysicalMaterial({ color: 0x0e1a24, roughness: 0.05, metalness: 0.1, clearcoat: 1, envMapIntensity: 1.1, transparent: true, opacity: 0.96 }),
+  group.add(cheatline);
+  // Black tail fin.
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.9), stripeMat);
+  fin.position.set(0, 0.6, -5.5);
+  fin.castShadow = true;
+  group.add(fin);
+
+  // Glass canopy over the nose.
+  const canopyMat = new THREE.MeshPhysicalMaterial({
+    color: 0x0e1a24, roughness: 0.05, metalness: 0.1,
+    clearcoat: 1, envMapIntensity: 1.1, transparent: true, opacity: 0.96,
+  });
+  const canopy = new THREE.Mesh(
+    extrudeProfile([[2.5, -0.3], [2.35, 0.7], [1.0, 1.0], [1.0, -0.3]], 1.6, 0.06),
+    canopyMat,
   );
-  grp.add(canopy);
-  // Tail boom + fin + tail rotor (tail extends to -Z).
-  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.3, 3.4, 8), bodyMat);
+  group.add(canopy);
+
+  // Tail boom, tail rotor, skids.
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.3, 3.4, 10), bodyMat);
   boom.rotation.x = Math.PI / 2;
   boom.position.set(0, 0.1, -4.0);
-  boom.castShadow = true;
-  grp.add(boom);
-  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.9), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 }));
-  fin.position.set(0, 0.6, -5.5);
-  grp.add(fin);
+  group.add(boom);
   const tailRotor = new THREE.Group();
   tailRotor.position.set(0.25, 0.6, -5.5);
-  const tailBlade = new THREE.MeshStandardMaterial({ color: 0x111111 });
-  for (const ang of [0, Math.PI / 2]) {
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.7, 0.22), tailBlade);
-    blade.rotation.x = ang;
+  const tailBladeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+  for (let i = 0; i < 2; i++) {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.7, 0.22), tailBladeMat);
+    blade.rotation.x = (i * Math.PI) / 2;
     tailRotor.add(blade);
   }
-  grp.add(tailRotor);
-  // Skids: two rails under the belly + struts up to the fuselage.
-  const skid = new THREE.MeshStandardMaterial({ color: 0x111111 });
+  group.add(tailRotor);
+  const skidMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
   for (const sx of [-0.85, 0.85]) {
-    const skidRail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.6, 6), skid);
-    skidRail.rotation.x = Math.PI / 2;
-    skidRail.position.set(sx, -1.3, 0.2);
-    grp.add(skidRail);
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.6, 8), skidMat);
+    rail.rotation.x = Math.PI / 2;
+    rail.position.set(sx, -1.3, 0.2);
+    group.add(rail);
     for (const sz of [-0.9, 1.3]) {
-      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55, 6), skid);
-      strut.position.set(sx, -1.0, sz);
-      strut.rotation.z = sx > 0 ? 0.5 : -0.5;
-      grp.add(strut);
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55, 6), skidMat);
+      strut.position.set(sx, -1.05, sz);
+      strut.rotation.z = sx > 0 ? 0.3 : -0.3;
+      group.add(strut);
     }
   }
-  // Main rotor + translucent motion-blur disc.
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.7, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+
+  // Main rotor: mast, two crossed blades, and a translucent blur disc.
+  const mastMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.7, 8), mastMat);
   mast.position.y = 1.3;
-  grp.add(mast);
+  group.add(mast);
   const rotor = new THREE.Group();
   rotor.position.y = 1.65;
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.5 });
-  for (const ang of [0, Math.PI / 2]) {
+  for (let i = 0; i < 2; i++) {
     const blade = new THREE.Mesh(new THREE.BoxGeometry(9, 0.06, 0.4), bladeMat);
-    blade.rotation.y = ang;
+    blade.rotation.y = (i * Math.PI) / 2;
     rotor.add(blade);
   }
-  grp.add(rotor);
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(4.5, 24), new THREE.MeshBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+  group.add(rotor);
+  const discMat = new THREE.MeshBasicMaterial({
+    color: 0xaaaaaa, transparent: true, opacity: 0.18,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(4.5, 32), discMat);
   disc.rotation.x = -Math.PI / 2;
   disc.position.y = 1.66;
-  grp.add(disc);
-  // Spotlight: a VOLUMETRIC cone (shader fades alpha along its length and
-  // toward the silhouette edges, peak ~0.2) + a soft radial-gradient pool.
-  // The old flat cone read as a hard-edged white triangle in the chase shot.
+  group.add(disc);
+
+  // The searchlight: a volumetric cone on a pivot (so it can aim), a pool
+  // of light on the ground, a real spotlight, and a glow at the lamp.
+  const beamPivot = new THREE.Group();
+  group.add(beamPivot);
   const beamMat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(0xfff2c8) } },
+    vertexShader: BEAM_VERT,
+    fragmentShader: BEAM_FRAG,
     transparent: true,
     blending: THREE.AdditiveBlending,
-    depthWrite: false,
     side: THREE.DoubleSide,
-    uniforms: { uColor: { value: new THREE.Color(0xfff2c8) } },
-    vertexShader: 'varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform vec3 uColor; varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ float axial = smoothstep(0.05, 0.85, vUv.y); float edge = abs(dot(normalize(vN), normalize(vV))); float a = axial * pow(edge, 1.6) * 0.32; gl_FragColor = vec4(uColor, a); }',
+    depthWrite: false,
   });
-  const beam = new THREE.Mesh(new THREE.ConeGeometry(2.2, 34, 20, 1, true), beamMat);
-  beam.position.y = -17;
-  grp.add(beam);
-  const poolCv = document.createElement('canvas');
-  poolCv.width = 128;
-  poolCv.height = 128;
-  const g2 = poolCv.getContext('2d');
-  const gradient = g2.createRadialGradient(64, 64, 4, 64, 64, 62);
-  gradient.addColorStop(0, 'rgba(255,242,200,0.9)');
-  gradient.addColorStop(0.45, 'rgba(255,242,200,0.35)');
-  gradient.addColorStop(1, 'rgba(255,242,200,0)');
-  g2.fillStyle = gradient;
-  g2.fillRect(0, 0, 128, 128);
-  const poolMap = new THREE.CanvasTexture(poolCv);
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(2.0, 24), new THREE.MeshBasicMaterial({ map: poolMap, color: 0xfff2c8, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
-  pool.rotation.x = -Math.PI / 2;
-  pool.position.y = -33.8;
-  grp.add(pool);
-  const spot = new THREE.SpotLight(0xfff2c8, 1.6, 60, 0.28, 0.5); // dimmed (Part 1.3 + hotfix): the beam was blowing the hero's roof/hood to white; the pool mesh still gives the ground glow
-  spot.position.set(0, 0, 0);
-  spot.target = pool;
-  grp.add(spot);
-  grp.add(spot.target);
-  // Bright lamp glow at the beam's origin (so the helicopter reads at night)
-  // + red/green navigation lights on the tail + a white strobe that blinks.
-  const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: poolMap, color: 0xfff2c8, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 34, 20, 1, true), beamMat);
+  cone.position.y = -17;
+  beamPivot.add(cone);
+  const glowTex = radialTexture();
+  const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xfff2c8, opacity: 0.6,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
   lampGlow.position.set(0, -1.4, 0);
   lampGlow.scale.set(3, 3, 1);
-  grp.add(lampGlow);
-  // Rim light: a thin emissive strip along the fuselage top so the steel
-  // body separates from the dark sky at night.
-  const rim = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 4.6), new THREE.MeshStandardMaterial({ color: 0xdfe8f2, emissive: 0xbcccdc, emissiveIntensity: 0.9 }));
+  group.add(lampGlow);
+
+  const poolMat = new THREE.MeshBasicMaterial({
+    color: 0xfff2c8, transparent: true, opacity: 0.25,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(2.0, 24), poolMat);
+  pool.rotation.x = -Math.PI / 2;
+  scene.add(pool);
+
+  const spot = new THREE.SpotLight(0xfff2c8, 1.6, 60, 0.28, 0.5);
+  scene.add(spot);
+  scene.add(spot.target);
+
+  // Rim light along the fuselage top, so the white body separates from a
+  // bright sky.
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: 0xdfe8f2, emissive: 0xbcccdc, emissiveIntensity: 0.9, roughness: 0.5,
+  });
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 4.6), rimMat);
   rim.position.set(0, 1.12, -0.2);
-  grp.add(rim);
-  const navLight = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 3 }));
-  navLight.position.set(-0.28, 1.3, -5.5);
-  grp.add(navLight);
-  const navGreen = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), new THREE.MeshStandardMaterial({ color: 0x20ff60, emissive: 0x20ff60, emissiveIntensity: 3 }));
-  navGreen.position.set(0.28, 1.3, -5.5);
-  grp.add(navGreen);
-  const strobe = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 4 }));
+  group.add(rim);
+
+  // Navigation lights and the double-blinking strobe.
+  const redNavMat = new THREE.MeshStandardMaterial({
+    color: 0x550000, emissive: 0xff2020, emissiveIntensity: 3, roughness: 0.3,
+  });
+  const greenNavMat = new THREE.MeshStandardMaterial({
+    color: 0x005500, emissive: 0x20ff60, emissiveIntensity: 3, roughness: 0.3,
+  });
+  const strobeMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 4, roughness: 0.3,
+  });
+  const redNav = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), redNavMat);
+  redNav.position.set(-0.28, 1.3, -5.5);
+  group.add(redNav);
+  const greenNav = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), greenNavMat);
+  greenNav.position.set(0.28, 1.3, -5.5);
+  group.add(greenNav);
+  const strobe = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), strobeMat);
   strobe.position.set(0, 0.7, -5.85);
-  grp.add(strobe);
+  group.add(strobe);
 
-  // Aim the cone + pool at a target (used by update() every frame, and by the
-  // chase screenshot staging to lock the beam on the hero after positioning).
-  function aimAt(targetPos) {
-    const vec = new THREE.Vector3(targetPos.x - grp.position.x, -grp.position.y + 0.2, targetPos.z - grp.position.z);
-    const len = vec.length();
-    const dir = vec.clone().normalize();
-    beam.position.copy(dir.clone().multiplyScalar(len / 2));
-    beam.scale.set(1, len / 34, 1);
-    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().negate());
-    pool.position.set(vec.x, -grp.position.y + 0.2, vec.z);
-    spot.target.position.set(vec.x, -grp.position.y + 0.2, vec.z);
-  }
+  group.position.set(-40, 34, 40);
+  scene.add(group);
 
-  // A held hover position (screenshot staging): the heli stays there instead
-  // of drifting back to its default hover behind the target.
   let hold = null;
-  function setHold(x, y, z) {
-    hold = new THREE.Vector3(x, y, z);
+  let aimTarget = null;
+
+  const down = new THREE.Vector3(0, -1, 0);
+  const tmpDir = new THREE.Vector3();
+
+  function aimAt(target) {
+    aimTarget = target;
+    const hp = group.position;
+    tmpDir.set(target.x - hp.x, target.y - hp.y, target.z - hp.z);
+    const dist = tmpDir.length();
+    if (dist < 0.01) return;
+    tmpDir.divideScalar(dist);
+    beamPivot.quaternion.setFromUnitVectors(down, tmpDir);
+    cone.scale.y = dist / 34;
+    pool.position.set(target.x, 0.12, target.z);
+    spot.position.copy(hp);
+    spot.target.position.set(target.x, target.y, target.z);
   }
+
+  function setHold(x, y, z) {
+    hold = { x, y, z };
+    group.position.set(x, y, z);
+  }
+
   function clearHold() {
     hold = null;
   }
 
-  function update(dt, t, targetPos) {
-    rotor.rotation.y += dt * 22;
-    tailRotor.rotation.x += dt * 30;
-    // White strobe: double-blink (bright for ~0.1 s every ~1 s).
-    strobe.material.emissiveIntensity = (t % 1.0) < 0.1 ? 6 : 0.4;
-    if (targetPos) {
-      // Hover above and slightly behind the target (or at the held spot),
-      // beam locked on it.
-      const hover = hold || new THREE.Vector3(targetPos.x - 8, 34, targetPos.z + 10);
-      grp.position.lerp(hover, 0.02);
-      aimAt(targetPos);
+  function update(dt, time, heroPos) {
+    rotor.rotation.y += 22 * dt;
+    tailRotor.rotation.x += 30 * dt;
+    // Double-blink strobe: two quick flashes each second.
+    const t = time % 1.0;
+    const on = t < 0.08 || (t > 0.18 && t < 0.26);
+    strobeMat.emissiveIntensity = on ? 6 : 0.4;
+    if (hold) {
+      group.position.set(hold.x, hold.y, hold.z);
+      if (aimTarget) aimAt(aimTarget);
+    } else if (heroPos) {
+      const tx = heroPos.x - 8;
+      const tz = heroPos.z - 18;
+      group.position.x += (tx - group.position.x) * 0.02;
+      group.position.y += (26 - group.position.y) * 0.02;
+      group.position.z += (tz - group.position.z) * 0.02;
+      group.lookAt(heroPos.x, group.position.y, heroPos.z);
+      aimAt({ x: heroPos.x, y: 0, z: heroPos.z });
+    } else {
+      group.position.x += (-40 - group.position.x) * 0.02;
+      group.position.y += (34 - group.position.y) * 0.02;
+      group.position.z += (40 - group.position.z) * 0.02;
+      aimAt({ x: group.position.x, y: 0, z: group.position.z });
     }
   }
-  return { group: grp, rotor, beam, pool, update, aimAt, setHold, clearHold };
+
+  return {
+    group, aimAt, setHold, clearHold, update,
+    get position() { return group.position; },
+  };
 }
 
-export function createPolice(scn, rng, level) {
+// The police force: cars, officers and roadblocks, with a dispatch list.
+export function createPolice(scene, rng) {
   const cars = [];
   const officers = [];
   const roadblocks = [];
+  let nameIdx = 0;
 
   function spawnCar(x, z, tactic) {
-    const { group } = makePoliceCar(level);
-    group.position.set(x, 0, z);
-    scn.add(group);
-    const car = { group, tactic: tactic || TACTICS[Math.floor(rng() * TACTICS.length)], name: UNIT_NAMES[cars.length % UNIT_NAMES.length], speed: 22 + rng() * 6 };
-    cars.push(car);
-    return car;
+    const car = makePoliceCar(rng);
+    car.group.position.set(x, 0, z);
+    const useTactic = tactic ?? TACTICS[Math.floor(rng() * TACTICS.length)];
+    const name = UNIT_NAMES[nameIdx % UNIT_NAMES.length];
+    nameIdx += 1;
+    const entry = {
+      ...car,
+      name,
+      tactic: useTactic,
+      speed: 22 + rng() * 6,
+    };
+    entry.group.userData.police = true;
+    scene.add(entry.group);
+    cars.push(entry);
+    return entry;
   }
 
   function spawnOfficer(x, z) {
-    const { group, parts } = makePerson(rng, { detail: level, officer: true, hairStyle: 3, shirt: 0x1a2a4a });
-    group.position.set(x, 0, z);
-    scn.add(group);
-    const officer = { group, parts };
-    officers.push(officer);
-    return officer;
+    const person = makePerson({
+      detail: 'full', officer: true, hairStyle: 3, shirt: 0x1a2a4a,
+      skin: 0xe8b88a, hair: 0x1a1a1a, pants: 0x2a2a3a, scale: 1,
+    });
+    person.group.position.set(x, 0, z);
+    scene.add(person.group);
+    const entry = { ...person, x, z };
+    officers.push(entry);
+    return entry;
   }
 
   function spawnRoadblock(x, z, rotY) {
-    const block = new THREE.Group();
-    for (let i = -1; i <= 1; i += 1) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 0.5), new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? 0xe8e8e8 : 0xc23a2e }));
-      bar.position.set(i * 1.9, 0.45, 0);
-      bar.castShadow = true;
-      block.add(bar);
+    const g = new THREE.Group();
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.6 });
+    const redMat = new THREE.MeshStandardMaterial({ color: 0xc23a2e, roughness: 0.6 });
+    for (let i = 0; i < 3; i++) {
+      const mat = i % 2 === 0 ? whiteMat : redMat;
+      const barrier = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 0.5), mat);
+      barrier.position.set(-1.9 + i * 1.9, 0.45, 0);
+      barrier.castShadow = true;
+      g.add(barrier);
     }
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 8), new THREE.MeshStandardMaterial({ color: 0xe87a3a }));
+    const coneMat = new THREE.MeshStandardMaterial({ color: 0xe87a3a, roughness: 0.7 });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 10), coneMat);
     cone.position.set(3.4, 0.45, 0);
-    block.add(cone);
-    block.position.set(x, 0, z);
-    block.rotation.y = rotY;
-    scn.add(block);
-    roadblocks.push(block);
-    return block;
-  }
-
-  function update(dt, t, heroPos, wanted) {
-    for (const car of cars) {
-      const dx = heroPos.x - car.group.position.x;
-      const dz = heroPos.z - car.group.position.z;
-      const d = Math.hypot(dx, dz) || 1;
-      const angle = Math.atan2(dx, dz);
-      let heading = car.group.rotation.y;
-      let gap = angle - heading;
-      while (gap > Math.PI) gap -= Math.PI * 2;
-      while (gap < -Math.PI) gap += Math.PI * 2;
-      heading += Math.max(-2.4 * dt, Math.min(2.4 * dt, gap));
-      car.group.rotation.y = heading;
-      const speed = wanted > 0 ? car.speed : 0;
-      car.group.position.x += Math.sin(heading) * speed * dt;
-      car.group.position.z += Math.cos(heading) * speed * dt;
-      const flash = car.group.userData.flash;
-      if (flash) {
-        const on = Math.sin(t * 10 + flash.phase) > 0;
-        flash.red.material.emissiveIntensity = on ? 3 : 0.2;
-        flash.blue.material.emissiveIntensity = on ? 0.2 : 3;
-        flash.light.color.setHex(on ? 0xff2020 : 0x2040ff);
-        flash.light.intensity = 6 + Math.sin(t * 10) * 3; // dimmed (Part 1.3): 8-20 was blowing the hero's roof/hood to white; the emissive lenses still read as flashing
-      }
-    }
+    g.add(cone);
+    g.position.set(x, 0, z);
+    g.rotation.y = rotY;
+    scene.add(g);
+    roadblocks.push(g);
+    return g;
   }
 
   function dispatch(heroPos) {
-    return cars.slice(0, 3).map((car) => {
-      const dist = Math.round(Math.hypot(heroPos.x - car.group.position.x, heroPos.z - car.group.position.z));
-      return { name: car.name, dist, tactic: car.tactic };
-    });
+    return cars.slice(0, 3).map((c) => ({
+      name: c.name,
+      dist: Math.round(Math.hypot(c.group.position.x - heroPos.x, c.group.position.z - heroPos.z)),
+      tactic: c.tactic,
+    }));
   }
 
-  return { cars, officers, roadblocks, spawnCar, spawnOfficer, spawnRoadblock, update, dispatch };
+  function update(dt, time, heroPos, wanted) {
+    for (const car of cars) {
+      const g = car.group;
+      flashPolice(car, time);
+      if (wanted <= 0) continue;
+      const dx = heroPos.x - g.position.x;
+      const dz = heroPos.z - g.position.z;
+      const want = Math.atan2(dx, dz);
+      let diff = want - g.rotation.y;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const turn = Math.max(-2.4 * dt, Math.min(2.4 * dt, diff));
+      g.rotation.y += turn;
+      g.position.x += Math.sin(g.rotation.y) * car.speed * dt;
+      g.position.z += Math.cos(g.rotation.y) * car.speed * dt;
+      for (const w of car.wheels) w.rotation.x += (car.speed * dt) / 0.42;
+    }
+  }
+
+  return { cars, officers, roadblocks, spawnCar, spawnOfficer, spawnRoadblock, dispatch, update };
 }

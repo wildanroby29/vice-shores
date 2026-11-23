@@ -1,316 +1,463 @@
-// hud.js — the whole interface as DOM over the canvas: light-glass panels
-// (no opaque black boxes), round minimap, speedometer, wanted stars, dispatch
-// ticker, cinematic subtitles, crew + weapon icons, a professional shop
-// overlay, a full-screen map, and the title screen with the heavy poster logo.
-// CSS lives here so the look is one place.
+// The HUD for Vice Shores: every panel the player sees over the canvas.
+//
+// Glass panels over the 3D view — objective, rank, wanted stars, money and
+// radio, the dispatch list, a round minimap, speedo, weapon and crew chips,
+// subtitles, health and armour — plus the overlays: the full map, the Vice
+// Customs shop, the title screen, and the title card that brands the title
+// screenshot. The canvas gets a slight contrast/saturation lift so the
+// sunset reads as warm on any monitor.
+
+import { FONT_STACK } from './config.js';
+
+const SHOP_ITEMS = [
+  { key: 'armour', name: 'Armour Plating', price: 800, desc: 'Reinforced panels. Take twice the punishment before the car smokes.' },
+  { key: 'engine', name: 'Engine Tune', price: 1200, desc: 'Stage-2 tune. Noticeably quicker off the line and a higher top speed.' },
+  { key: 'nitro', name: 'Nitro Boost', price: 900, desc: 'A tank of nitro. Hold Shift for a short burst of speed.' },
+  { key: 'paint', name: 'Sunset Gold Paint', price: 500, desc: 'Factory gold flake with a deep clearcoat. Turns heads on the boulevard.' },
+  { key: 'wheels', name: 'Chrome Wheels', price: 650, desc: 'Polished chrome rims with low-profile tyres. Pure boulevard style.' },
+  { key: 'bodykit', name: 'Body Kit', price: 1500, desc: 'Front splitter, side skirts and a rear wing. The GT looks the part.' },
+];
+
 const CSS = `
-#hud{position:fixed;inset:0;pointer-events:none;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#f2f4f8;z-index:5}
-.glass{background:rgba(12,16,32,0.35);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.18);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,0.25);text-shadow:0 1px 3px rgba(0,0,0,0.8)}
-.accent{border-left:3px solid #ffb36b}
-#obj{position:absolute;top:14px;left:14px;padding:10px 14px;max-width:340px}
-#obj .t{font-weight:800;font-size:15px;letter-spacing:0.4px}
-#obj .s{font-size:12.5px;opacity:0.92;margin-top:3px}
-#obj .bar{height:5px;background:rgba(255,255,255,0.18);border-radius:3px;margin-top:8px;overflow:hidden}
-#obj .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffb36b,#ff5a3a);border-radius:3px}
-#rank{position:absolute;top:96px;left:14px;padding:6px 12px;font-size:12px;font-weight:700;letter-spacing:1px}
-#stars{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:26px;letter-spacing:4px;color:#ffd94a;text-shadow:0 0 12px rgba(255,200,60,0.7),0 2px 4px rgba(0,0,0,0.8)}
-#stars .dim{color:rgba(255,255,255,0.35);text-shadow:none}
-#money{position:absolute;top:14px;right:14px;padding:9px 14px;text-align:right}
-#money .m{font-weight:800;font-size:17px;color:#7de08a}
-#money .c{font-size:12px;opacity:0.9;margin-top:2px}
-#money .r{font-size:11px;opacity:0.65;margin-top:2px}
-#dispatch{position:absolute;top:120px;right:14px;width:230px;padding:8px 10px;font-size:12px}
-#dispatch .h{font-weight:800;font-size:11px;letter-spacing:1px;opacity:0.85;margin-bottom:5px}
-#dispatch .row{display:flex;justify-content:space-between;padding:2px 0}
-#dispatch .row b{color:#ffb36b}
-#minimap{position:absolute;left:14px;bottom:14px;width:180px;height:180px;border-radius:50%;border:2px solid rgba(255,255,255,0.35);box-shadow:0 4px 18px rgba(0,0,0,0.4);background:#10182a}
-#speedo{position:absolute;right:16px;bottom:16px;text-align:right;text-shadow:0 2px 6px rgba(0,0,0,0.85)}
-#speedo .n{font-size:44px;font-weight:800;line-height:1}
-#speedo .u{font-size:12px;opacity:0.85}
-#speedo .car{font-size:13px;font-weight:700;margin-top:2px}
-#speedo .cond{font-size:11px;opacity:0.8}
-#weapon{position:absolute;right:16px;bottom:110px;padding:7px 11px;font-size:13px;font-weight:700}
-#crew{position:absolute;right:16px;bottom:152px;display:flex;gap:8px}
-#crew .k{padding:6px 9px;font-size:11px;font-weight:700}
-#crew .k b{color:#ffb36b}
-#sub{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);max-width:640px;text-align:center;font-size:17px;font-weight:600;text-shadow:0 2px 6px rgba(0,0,0,0.9),0 0 2px rgba(0,0,0,0.9)}
-#health{position:absolute;left:208px;bottom:16px;padding:8px 12px;font-size:12px}
-#health .hb{height:6px;background:rgba(255,255,255,0.18);border-radius:3px;margin-top:4px;overflow:hidden;width:130px}
-#health .hb i{display:block;height:100%;background:#4ade80}
-#health .ab i{background:#7fb2ff}
-#vignette{position:fixed;inset:0;pointer-events:none;z-index:4;background:transparent}
-#game{filter:contrast(1.08) saturate(1.18) brightness(1.02)}
-#mapOv,#shopOv{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:20;background:rgba(6,10,22,0.72);backdrop-filter:blur(4px);pointer-events:auto}
-#mapOv .card,#shopOv .card{background:rgba(14,20,40,0.85);border:1px solid rgba(255,255,255,0.2);border-radius:14px;padding:18px;box-shadow:0 12px 40px rgba(0,0,0,0.5)}
-#mapOv canvas{border-radius:10px}
-#mapOv .legend{font-size:12px;opacity:0.9;margin-top:10px;line-height:1.7}
-#shopOv .grid{display:grid;grid-template-columns:repeat(3,190px);gap:12px;margin-top:12px}
-#shopOv .item{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.16);border-radius:10px;padding:12px}
-#shopOv .item h4{margin:0 0 4px;font-size:14px}
-#shopOv .item p{margin:0 0 10px;font-size:11.5px;opacity:0.85;line-height:1.45}
-#shopOv .item .price{font-weight:800;color:#7de08a;font-size:14px}
-#shopOv .item button{margin-top:8px;width:100%;padding:7px;border:0;border-radius:7px;font-weight:800;cursor:pointer;background:linear-gradient(90deg,#ffb36b,#ff5a3a);color:#1a1206}
-#shopOv .item button:disabled{opacity:0.4;cursor:default}
-#title{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:center;padding-left:6vw;background:linear-gradient(90deg,rgba(8,10,24,0.72) 0%,rgba(8,10,24,0.35) 45%,rgba(8,10,24,0) 75%);color:#fff;font-family:system-ui,sans-serif}
-#title .menu{margin-top:26px}
-#title .menu div{font-size:30px;font-weight:800;letter-spacing:2px;padding:7px 0;color:rgba(255,255,255,0.85);cursor:pointer;text-shadow:0 2px 8px rgba(0,0,0,0.8)}
-#title .menu div.sel{color:#ffb36b}
-#title .menu div.sel::before{content:"▸ "}
-#title .slots{margin-top:30px;max-width:520px}
-#title .slot{display:flex;justify-content:space-between;padding:9px 14px;margin-top:8px;background:rgba(12,16,32,0.32);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.18);border-radius:9px;font-size:13px}
-#title .slot b{color:#ffb36b}
-#title .ctrl{position:absolute;bottom:18px;left:6vw;font-size:12px;opacity:0.7}
-#toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);padding:9px 18px;font-weight:700;font-size:14px;z-index:40;display:none}
-#titleCard{position:fixed;inset:0;z-index:30;display:none;flex-direction:column;align-items:center;justify-content:space-between;padding:5vh 0 7vh;pointer-events:none;background:linear-gradient(180deg,rgba(8,10,24,0.5) 0%,rgba(8,10,24,0.18) 32%,rgba(8,10,24,0) 58%);color:#fff;font-family:system-ui,sans-serif}
-#titleCard .sub{margin-top:10px;font-size:20px;font-weight:700;letter-spacing:4px;color:#fff;text-align:center;padding:8px 28px;background:linear-gradient(90deg,transparent,rgba(8,10,24,0.62) 18%,rgba(8,10,24,0.62) 82%,transparent);border-radius:6px;text-shadow:0 1px 4px rgba(0,0,0,0.9)}
-#titleCard .press{font-size:30px;font-weight:800;letter-spacing:10px;color:#fff;text-shadow:0 0 20px rgba(255,255,255,0.75),0 2px 14px rgba(0,0,0,0.95);animation:pulse 1.6s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:0.95}50%{opacity:0.9}}
+#game { filter: contrast(1.08) saturate(1.18) brightness(1.02); }
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-family: ${FONT_STACK}; color: #f2f4f8; }
+#hud .glass { background: rgba(12,16,32,0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.25); text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+#hud .accent { border-left: 3px solid #ffb36b; }
+#objective { position: absolute; top: 14px; left: 14px; max-width: 340px; padding: 10px 14px; font-size: 14px; }
+#objective .job { font-size: 15px; font-weight: 700; }
+#objective .goal { font-size: 12.5px; opacity: 0.9; margin-top: 2px; }
+#objective .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.2); margin-top: 8px; overflow: hidden; }
+#objective .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffb36b, #ff5a3a); }
+#rank { position: absolute; top: 96px; left: 14px; padding: 6px 12px; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+#stars { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 26px; letter-spacing: 4px; color: #ffd94a; text-shadow: 0 0 12px rgba(255,217,74,0.6), 0 2px 4px rgba(0,0,0,0.8); }
+#stars .dim { color: rgba(255,255,255,0.35); text-shadow: none; }
+#money { position: absolute; top: 14px; right: 14px; padding: 9px 14px; text-align: right; font-size: 14px; }
+#money .amount { font-size: 17px; font-weight: 700; color: #7de08a; }
+#money .clock { font-size: 12px; opacity: 0.9; }
+#money .radio { font-size: 11px; opacity: 0.7; }
+#dispatch { position: absolute; top: 120px; right: 14px; width: 230px; padding: 8px 10px; font-size: 12px; }
+#dispatch .head { font-size: 11px; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
+#dispatch .row { display: flex; justify-content: space-between; padding: 2px 0; }
+#dispatch .row b { color: #ffb36b; }
+#minimapWrap { position: absolute; left: 14px; bottom: 14px; width: 180px; height: 180px; border-radius: 50%; overflow: hidden; border: 2px solid rgba(255,255,255,0.35); background: #10182a; }
+#minimap { display: block; width: 180px; height: 180px; }
+#health { position: absolute; left: 208px; bottom: 16px; padding: 8px 12px; font-size: 12px; }
+#health .lbl { display: flex; justify-content: space-between; margin: 2px 0; }
+#health .track { width: 130px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.2); overflow: hidden; }
+#health .track i { display: block; height: 100%; }
+#health .hp i { background: #4ade80; }
+#health .ar i { background: #7fb2ff; }
+#speedo { position: absolute; right: 16px; bottom: 16px; text-align: right; font-size: 16px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+#speedo .num { font-size: 44px; font-weight: 800; line-height: 1; }
+#speedo .unit { font-size: 12px; opacity: 0.85; }
+#speedo .car { font-size: 13px; font-weight: 700; margin-top: 2px; }
+#speedo .cond { font-size: 11px; opacity: 0.85; }
+#weapon { position: absolute; right: 16px; bottom: 110px; padding: 7px 11px; font-size: 13px; font-weight: 700; }
+#crew { position: absolute; right: 16px; bottom: 152px; display: flex; gap: 8px; }
+#crew .chip { padding: 6px 9px; font-size: 11px; font-weight: 700; }
+#crew .chip b { color: #ffb36b; }
+#subtitle { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); max-width: 640px; text-align: center; font-size: 17px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.6); }
+#toast { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); padding: 9px 18px; font-size: 14px; font-weight: 700; display: none; }
+#vignette { position: fixed; inset: 0; pointer-events: none; z-index: 5; background: radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,0.35) 100%); }
+.overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 20; background: rgba(6,10,22,0.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.overlay .card { background: rgba(14,20,40,0.85); border-radius: 14px; padding: 18px; border: 1px solid rgba(255,255,255,0.15); }
+.overlay h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: 1px; }
+.overlay .hint { font-size: 12px; opacity: 0.7; margin-bottom: 12px; }
+.overlay .legend { font-size: 12px; opacity: 0.8; margin-top: 10px; }
+#shopGrid { display: grid; grid-template-columns: repeat(3, 190px); gap: 12px; }
+#shopGrid .item { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; }
+#shopGrid .item h3 { margin: 0 0 4px; font-size: 14px; }
+#shopGrid .item p { margin: 0 0 8px; font-size: 11.5px; opacity: 0.85; line-height: 1.4; }
+#shopGrid .price { color: #7de08a; font-weight: 700; font-size: 14px; }
+#shopGrid button { width: 100%; margin-top: 8px; padding: 8px; border: none; border-radius: 8px; background: linear-gradient(90deg, #ffb36b, #ff5a3a); color: #1a0e08; font-weight: 800; font-size: 13px; cursor: pointer; pointer-events: auto; }
+#shopGrid button:disabled { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); cursor: default; }
+#titleScreen { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: center; padding-left: 6vw; background: linear-gradient(90deg, rgba(8,10,24,0.72), rgba(8,10,24,0) 75%); font-family: ${FONT_STACK}; color: #f2f4f8; }
+#titleScreen .menu { margin-top: 18px; font-size: 30px; font-weight: 700; letter-spacing: 2px; line-height: 1.5; }
+#titleScreen .menu .sel { color: #ffb36b; }
+#titleScreen .slots { max-width: 520px; margin-top: 16px; }
+#titleScreen .slot { padding: 9px 14px; margin-top: 8px; border-radius: 9px; font-size: 13px; display: flex; justify-content: space-between; background: rgba(12,16,32,0.35); border: 1px solid rgba(255,255,255,0.18); }
+#titleScreen .controls { margin-top: 22px; font-size: 12px; opacity: 0.7; }
+#titleCard { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 5vh 0 7vh; pointer-events: none; background: linear-gradient(180deg, rgba(8,10,24,0.5), rgba(8,10,24,0.18) 32%, transparent 58%); font-family: ${FONT_STACK}; }
+#titleCard .sub { font-size: 20px; font-weight: 700; letter-spacing: 4px; color: #fff; text-align: center; padding: 8px 28px; border-radius: 6px; background: linear-gradient(90deg, transparent, rgba(8,10,24,0.62) 18%, rgba(8,10,24,0.62) 82%, transparent); }
+#titleCard .press { font-size: 30px; font-weight: 700; letter-spacing: 10px; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.75), 0 2px 14px rgba(0,0,0,0.95); animation: pressPulse 1.6s ease-in-out infinite; }
+@keyframes pressPulse { 0%, 100% { opacity: 0.95; } 50% { opacity: 0.9; } }
 `;
 
-export function createHud() {
-  const css = document.createElement('style');
-  css.textContent = CSS;
-  document.head.appendChild(css);
+const CHROME_GRAD = ['#fff7c8', '#ffd94a', '#ff8a3a', '#e83a2a'];
 
-  const hud = document.createElement('div');
-  hud.id = 'hud';
-  hud.innerHTML = `
-    <div id="obj" class="glass accent"><div class="t"></div><div class="s"></div><div class="bar"><i></i></div></div>
-    <div id="rank" class="glass"></div>
-    <div id="stars"></div>
-    <div id="money" class="glass"><div class="m"></div><div class="c"></div><div class="r"></div></div>
-    <div id="dispatch" class="glass"><div class="h">DISPATCH</div><div class="rows"></div></div>
-    <canvas id="minimap" width="180" height="180"></canvas>
-    <div id="speedo"><div class="n">0</div><div class="u">km/h</div><div class="car"></div><div class="cond"></div></div>
-    <div id="weapon" class="glass"></div>
-    <div id="crew"></div>
-    <div id="sub"></div>
-    <div id="health" class="glass"><div>HEALTH</div><div class="hb"><i></i></div><div style="margin-top:5px">ARMOUR</div><div class="hb ab"><i></i></div></div>
-    <div id="toast" class="glass"></div>`;
-  document.body.appendChild(hud);
+function chromeGradient(id) {
+  return `<defs>
+    <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${CHROME_GRAD[0]}"/>
+      <stop offset="0.45" stop-color="${CHROME_GRAD[1]}"/>
+      <stop offset="0.75" stop-color="${CHROME_GRAD[2]}"/>
+      <stop offset="1" stop-color="${CHROME_GRAD[3]}"/>
+    </linearGradient>
+    <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9a3a"/>
+      <stop offset="1" stop-color="#ff5a2a"/>
+    </linearGradient>
+    <linearGradient id="${id}sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd94a"/>
+      <stop offset="1" stop-color="#ff5a3a"/>
+    </linearGradient>
+    <filter id="${id}glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>`;
+}
+
+// The title-screen logo (two lines, black slits, black fins at the bottom
+// right) — the menu version, shown behind the title screen.
+function titleLogoSvg() {
+  return `<svg width="640" height="330" viewBox="0 0 640 330" xmlns="http://www.w3.org/2000/svg">
+  ${chromeGradient('t')}
+  <circle cx="470" cy="150" r="105" fill="url(#tsun)" opacity="0.9"/>
+  <rect x="350" y="120" width="240" height="9" fill="#0a0e1e" opacity="0.85"/>
+  <rect x="350" y="142" width="240" height="8" fill="#0a0e1e" opacity="0.85"/>
+  <rect x="350" y="163" width="240" height="7" fill="#0a0e1e" opacity="0.85"/>
+  <rect x="350" y="183" width="240" height="6" fill="#0a0e1e" opacity="0.85"/>
+  <text x="30" y="150" font-family="Arial Black, sans-serif" font-size="118" font-weight="900" font-style="italic" transform="skewX(-8)" fill="url(#t)" stroke="#ff5a3a" stroke-width="1.5" filter="url(#tglow)">VICE</text>
+  <text x="30" y="262" font-family="Arial Black, sans-serif" font-size="118" font-weight="900" font-style="italic" transform="skewX(-8)" fill="url(#t)" stroke="#ff5a3a" stroke-width="1.5" filter="url(#tglow)">SHORES</text>
+  <path d="M520 300 L560 300 L540 326 Z" fill="#0a0e1e"/>
+  <path d="M565 296 L600 296 L582 326 Z" fill="#0a0e1e"/>
+  <path d="M605 302 L632 302 L618 326 Z" fill="#0a0e1e"/>
+  <text x="30" y="302" font-family="Arial Black, sans-serif" font-size="21" font-weight="700" letter-spacing="4" fill="#ffffff">A SUN-SOAKED CITY OF YOUR OWN</text>
+  <text x="30" y="326" font-family="Arial Black, sans-serif" font-size="14" letter-spacing="3" fill="#ffb36b">EIGHT JOBS · FIVE STARS · ONE GOLDEN HOUR</text>
+  </svg>`;
+}
+
+// The title CARD logo (one line, gradient slits behind the text, no black
+// fins) — the version that brands the title screenshot.
+function titleCardSvg() {
+  return `<svg width="900" height="300" viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+  ${chromeGradient('c')}
+  <circle cx="450" cy="140" r="125" fill="url(#csun)" opacity="0.95"/>
+  <rect x="330" y="196" width="240" height="8" fill="url(#cs)" opacity="0.9"/>
+  <rect x="330" y="216" width="240" height="7" fill="url(#cs)" opacity="0.9"/>
+  <rect x="330" y="235" width="240" height="6" fill="url(#cs)" opacity="0.9"/>
+  <rect x="330" y="253" width="240" height="5" fill="url(#cs)" opacity="0.9"/>
+  <text x="450" y="172" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="100" font-weight="900" font-style="italic" fill="url(#c)" stroke="#ff5a3a" stroke-width="1.5" filter="url(#cglow)">VICE SHORES</text>
+  </svg>`;
+}
+
+function el(tag, cls, parent) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function drawMap(ctx, W, H, st) {
+  const scale = Math.min(W, H) / 440;
+  const cx = W / 2;
+  const cy = H / 2;
+  const X = (x) => cx + x * scale;
+  const Y = (z) => cy + z * scale;
+  ctx.fillStyle = '#16233a';
+  ctx.fillRect(0, 0, W, H);
+  // Land, sea and sand.
+  ctx.fillStyle = '#2a4a22';
+  ctx.fillRect(X(-210), Y(-210), 420 * scale, 420 * scale);
+  ctx.fillStyle = '#1d5f7a';
+  ctx.fillRect(X(176), Y(-210), 34 * scale, 420 * scale);
+  ctx.fillRect(X(-210), Y(176), 420 * scale, 34 * scale);
+  ctx.fillStyle = '#e8cf9a';
+  ctx.fillRect(X(176), Y(-210), 8 * scale, 420 * scale);
+  ctx.fillRect(X(-210), Y(176), 420 * scale, 8 * scale);
+  // Roads on the grid.
+  ctx.strokeStyle = '#2e2e36';
+  ctx.lineWidth = Math.max(2, 7 * scale);
+  for (let i = -4; i <= 4; i++) {
+    const c = i * 60;
+    ctx.beginPath(); ctx.moveTo(X(-210), Y(c)); ctx.lineTo(X(210), Y(c)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(c), Y(-210)); ctx.lineTo(X(c), Y(210)); ctx.stroke();
+  }
+  // Buildings.
+  ctx.fillStyle = '#8a94a8';
+  for (const b of st.map.buildings) {
+    ctx.fillRect(X(b.x - b.w / 2), Y(b.z - b.d / 2), b.w * scale, b.d * scale);
+  }
+  // The pier.
+  ctx.fillStyle = '#8a6a4a';
+  ctx.fillRect(X(180), Y(150), 10 * scale, 90 * scale);
+  // Mission marker.
+  const mt = st.map.mission;
+  ctx.fillStyle = '#ffd94a';
+  ctx.save();
+  ctx.translate(X(mt[0]), Y(mt[1]));
+  ctx.rotate(Math.PI / 4);
+  const ms = 6;
+  ctx.fillRect(-ms / 2, -ms / 2, ms, ms);
+  ctx.restore();
+  // Police dots.
+  ctx.fillStyle = '#ff4040';
+  for (const p of st.map.police) {
+    ctx.beginPath();
+    ctx.arc(X(p.x), Y(p.z), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // The player arrow, rotated to the heading.
+  const pl = st.map.player;
+  ctx.fillStyle = '#ffffff';
+  ctx.save();
+  ctx.translate(X(pl.x), Y(pl.z));
+  ctx.rotate(pl.heading);
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(6, 6);
+  ctx.lineTo(-6, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+export function createHud() {
+  const style = document.createElement('style');
+  style.textContent = CSS;
+  document.head.appendChild(style);
+
   const vignette = document.createElement('div');
   vignette.id = 'vignette';
   document.body.appendChild(vignette);
 
-  const $ = (id) => document.getElementById(id);
-  const mini = $('minimap').getContext('2d');
+  const hud = el('div', '', document.body);
+  hud.id = 'hud';
 
-  // Full-screen map overlay.
-  const mapBox = document.createElement('div');
-  mapBox.id = 'mapOv';
-  mapBox.innerHTML = `<div class="card"><div style="font-weight:800;font-size:17px;margin-bottom:8px">VICE SHORES — FULL MAP <span style="float:right;font-size:12px;opacity:0.7">press M to close</span></div><canvas id="bigmap" width="860" height="640"></canvas><div class="legend">◆ You &nbsp; ● Police &nbsp; ◆ Mission &nbsp; — Roads &nbsp; ■ Buildings &nbsp; <span style="color:#ffb36b">Coral Row</span> · <span style="color:#7fb2ff">Marina</span> · <span style="color:#7de08a">Pier</span> · Bank District · North Garage · Plaza</div></div>`;
-  document.body.appendChild(mapBox);
-  const bigMap = $('bigmap').getContext('2d');
+  const objective = el('div', 'glass accent', hud);
+  objective.id = 'objective';
+  const jobTitle = el('div', 'job', objective);
+  const jobGoal = el('div', 'goal', objective);
+  const barWrap = el('div', 'bar', objective);
+  const barFill = el('i', '', barWrap);
 
-  // Professional shop overlay.
-  const SHOP = [
-    { name: 'Armour Plating', desc: 'Reinforced panels. Take twice the punishment before the car smokes.', price: 800, key: 'armour' },
-    { name: 'Engine Tune', desc: 'Stage-2 tune. Noticeably quicker off the line and a higher top speed.', price: 1200, key: 'engine' },
-    { name: 'Nitro Boost', desc: 'A tank of nitro. Hold Shift for a short burst of speed.', price: 900, key: 'nitro' },
-    { name: 'Sunset Gold Paint', desc: 'Factory gold flake with a deep clearcoat. Turns heads on the boulevard.', price: 500, key: 'paint' },
-    { name: 'Chrome Wheels', desc: 'Polished chrome rims with low-profile tyres. Pure boulevard style.', price: 650, key: 'wheels' },
-    { name: 'Body Kit', desc: 'Front splitter, side skirts and a rear wing. The GT looks the part.', price: 1500, key: 'bodykit' },
-  ];
-  const shopBox = document.createElement('div');
-  shopBox.id = 'shopOv';
-  shopBox.innerHTML = `<div class="card"><div style="font-weight:800;font-size:17px">VICE CUSTOMS — UPGRADES <span style="float:right;font-size:12px;opacity:0.7">press G to close</span></div><div class="grid"></div></div>`;
-  document.body.appendChild(shopBox);
-  const gridEl = shopBox.querySelector('.grid');
-  const ownedKeys = new Set();
-  const buyers = [];
-  for (const item of SHOP) {
-    const el = document.createElement('div');
-    el.className = 'item';
-    el.innerHTML = `<h4>${item.name}</h4><p>${item.desc}</p><div class="price">$${item.price}</div><button>BUY</button>`;
-    el.querySelector('button').addEventListener('click', () => {
-      for (const h of buyers) h(item, el);
+  const rank = el('div', 'glass', hud);
+  rank.id = 'rank';
+
+  const stars = el('div', '', hud);
+  stars.id = 'stars';
+
+  const money = el('div', 'glass', hud);
+  money.id = 'money';
+  const amount = el('div', 'amount', money);
+  const clockEl = el('div', 'clock', money);
+  const radioEl = el('div', 'radio', money);
+
+  const dispatch = el('div', 'glass', hud);
+  dispatch.id = 'dispatch';
+  const dispatchHead = el('div', 'head', dispatch);
+  dispatchHead.textContent = 'DISPATCH';
+  const dispatchRows = el('div', '', dispatch);
+
+  const minimapWrap = el('div', '', hud);
+  minimapWrap.id = 'minimapWrap';
+  const minimap = document.createElement('canvas');
+  minimap.id = 'minimap';
+  minimap.width = 180;
+  minimap.height = 180;
+  minimapWrap.appendChild(minimap);
+  const mmapCtx = minimap.getContext('2d');
+
+  const health = el('div', 'glass', hud);
+  health.id = 'health';
+  const hpLbl = el('div', 'lbl', health);
+  hpLbl.innerHTML = '<span>HEALTH</span>';
+  const hpTrack = el('div', 'track hp', health);
+  const hpFill = el('i', '', hpTrack);
+  const arLbl = el('div', 'lbl', health);
+  arLbl.innerHTML = '<span>ARMOUR</span>';
+  const arTrack = el('div', 'track ar', health);
+  const arFill = el('i', '', arTrack);
+
+  const speedo = el('div', '', hud);
+  speedo.id = 'speedo';
+  const speedNum = el('div', 'num', speedo);
+  const speedUnit = el('div', 'unit', speedo);
+  speedUnit.textContent = 'km/h';
+  const carNameEl = el('div', 'car', speedo);
+  const condEl = el('div', 'cond', speedo);
+
+  const weapon = el('div', 'glass', hud);
+  weapon.id = 'weapon';
+
+  const crew = el('div', '', hud);
+  crew.id = 'crew';
+
+  const subtitle = el('div', '', hud);
+  subtitle.id = 'subtitle';
+
+  const toast = el('div', 'glass', hud);
+  toast.id = 'toast';
+
+  // Full-map overlay.
+  const mapOverlay = el('div', 'overlay', document.body);
+  mapOverlay.style.display = 'none';
+  const mapCard = el('div', 'card', mapOverlay);
+  const mapTitle = el('h2', '', mapCard);
+  mapTitle.textContent = 'VICE SHORES — FULL MAP';
+  const mapHint = el('div', 'hint', mapCard);
+  mapHint.textContent = 'press M to close';
+  const mapCanvas = document.createElement('canvas');
+  mapCanvas.width = 860;
+  mapCanvas.height = 640;
+  mapCard.appendChild(mapCanvas);
+  const mapCtx = mapCanvas.getContext('2d');
+  const mapLegend = el('div', 'legend', mapCard);
+  mapLegend.textContent = '◆ You  ● Police  ◆ Mission  — Roads  ■ Buildings   Coral Row / Marina / Pier / Bank District / North Garage / Plaza';
+
+  // Shop overlay.
+  const shopOverlay = el('div', 'overlay', document.body);
+  shopOverlay.style.display = 'none';
+  const shopCard = el('div', 'card', shopOverlay);
+  const shopTitle = el('h2', '', shopCard);
+  shopTitle.textContent = 'VICE CUSTOMS — UPGRADES';
+  const shopHint = el('div', 'hint', shopCard);
+  shopHint.textContent = 'press G to close';
+  const shopGrid = el('div', '', shopCard);
+  shopGrid.id = 'shopGrid';
+  const buyButtons = {};
+  for (const item of SHOP_ITEMS) {
+    const card = el('div', 'item', shopGrid);
+    const name = el('h3', '', card);
+    name.textContent = item.name;
+    const desc = el('p', '', card);
+    desc.textContent = item.desc;
+    const price = el('div', 'price', card);
+    price.textContent = `$${item.price}`;
+    const btn = document.createElement('button');
+    btn.textContent = 'BUY';
+    btn.dataset.key = item.key;
+    card.appendChild(btn);
+    buyButtons[item.key] = btn;
+  }
+
+  // Title screen overlay.
+  const titleScreen = el('div', '', document.body);
+  titleScreen.id = 'titleScreen';
+  titleScreen.style.display = 'none';
+  const logoWrap = el('div', '', titleScreen);
+  logoWrap.innerHTML = titleLogoSvg();
+  const menu = el('div', 'menu', titleScreen);
+  const menuItems = ['CONTINUE', 'NEW GAME', 'LOAD GAME', 'SETTINGS'];
+  const menuEls = menuItems.map((label, i) => {
+    const row = el('div', i === 0 ? 'sel' : '', menu);
+    row.textContent = (i === 0 ? '▸ ' : '   ') + label;
+    return row;
+  });
+  const slotsWrap = el('div', 'slots', titleScreen);
+  const controls = el('div', 'controls', titleScreen);
+  controls.textContent = 'WASD drive · E enter / steal car · SPACE shoot · SHIFT sprint / nitro · C camera · M map · G customs · P pause';
+
+  // Title card overlay (the title screenshot).
+  const titleCard = el('div', '', document.body);
+  titleCard.id = 'titleCard';
+  titleCard.style.display = 'none';
+  const cardCol = el('div', '', titleCard);
+  cardCol.style.display = 'flex';
+  cardCol.style.flexDirection = 'column';
+  cardCol.style.alignItems = 'center';
+  const cardSvg = el('div', '', cardCol);
+  cardSvg.innerHTML = titleCardSvg();
+  const cardSub = el('div', 'sub', cardCol);
+  cardSub.textContent = 'A SUN-SOAKED CITY OF YOUR OWN';
+  const press = el('div', 'press', titleCard);
+  press.textContent = 'PRESS START';
+
+  let buyHandler = null;
+  let toastTimer = null;
+
+  function showToast(text) {
+    toast.textContent = text;
+    toast.style.display = 'block';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 2600);
+  }
+
+  for (const key of Object.keys(buyButtons)) {
+    buyButtons[key].addEventListener('click', () => {
+      if (buyHandler) buyHandler(key);
     });
-    gridEl.appendChild(el);
   }
 
-  // Title screen overlay (SVG logo: heavy italic poster lettering, chrome/sunset
-  // gradient, thin neon glow outline, retro sun with slits, palm silhouette).
-  const titleBox = document.createElement('div');
-  titleBox.id = 'title';
-  titleBox.innerHTML = `
-    <svg width="640" height="330" viewBox="0 0 640 330" aria-label="Vice Shores">
-      <defs>
-        <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#fff7c8"/><stop offset="0.45" stop-color="#ffd94a"/>
-          <stop offset="0.55" stop-color="#ff8a3a"/><stop offset="1" stop-color="#e83a2a"/>
-        </linearGradient>
-        <linearGradient id="sunG" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#ffd94a"/><stop offset="1" stop-color="#ff5a3a"/>
-        </linearGradient>
-        <filter id="neon" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <circle cx="470" cy="150" r="105" fill="url(#sunG)" opacity="0.9"/>
-      <g fill="#0a0e1e" opacity="0.85"><rect x="350" y="120" width="240" height="9"/><rect x="350" y="142" width="240" height="8"/><rect x="350" y="163" width="240" height="7"/><rect x="350" y="183" width="240" height="6"/></g>
-      <g fill="#0a0e1e"><path d="M520 250 q10 -52 4 -92 q14 40 4 92z M545 250 q22 -40 34 -58 q-6 34 -14 58z M500 250 q-4 -44 -16 -66 q2 36 -4 66z"/></g>
-      <g font-family="Arial Black, Arial, sans-serif" font-style="italic" font-weight="900" filter="url(#neon)">
-        <text x="18" y="150" font-size="118" fill="url(#chrome)" stroke="#ff5a3a" stroke-width="1.5" transform="skewX(-8)">VICE</text>
-        <text x="18" y="262" font-size="118" fill="url(#chrome)" stroke="#ff5a3a" stroke-width="1.5" transform="skewX(-8)">SHORES</text>
-      </g>
-      <text x="22" y="302" font-family="Arial, sans-serif" font-size="21" font-weight="700" letter-spacing="4" fill="#ffffff">A SUN-SOAKED CITY OF YOUR OWN</text>
-      <text x="22" y="326" font-family="Arial, sans-serif" font-size="14" letter-spacing="3" fill="#ffb36b">EIGHT JOBS · FIVE STARS · ONE GOLDEN HOUR</text>
-    </svg>
-    <div class="menu"><div class="sel">CONTINUE</div><div>NEW GAME</div><div>LOAD GAME</div><div>SETTINGS</div></div>
-    <div class="slots"></div>
-    <div class="ctrl">WASD drive &nbsp;·&nbsp; E enter / steal car &nbsp;·&nbsp; SPACE shoot &nbsp;·&nbsp; SHIFT sprint / nitro &nbsp;·&nbsp; C camera &nbsp;·&nbsp; M map &nbsp;·&nbsp; G customs &nbsp;·&nbsp; P pause</div>`;
-  document.body.appendChild(titleBox);
-
-  // Title card overlay for the ?shot=title screenshot: the big logo over the
-  // live golden-hour boulevard (no menu soup), HUD hidden. Round 9: the logo
-  // is ONE line, centred, ~60% of frame width; the retro sun is centred
-  // BEHIND it and its slit lines are drawn BEHIND the text in sunset-gradient
-  // colours (never black, never crossing a letter).
-  const cardBox = document.createElement('div');
-  cardBox.id = 'titleCard';
-  cardBox.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center">
-    <svg width="900" height="300" viewBox="0 0 900 300" aria-label="Vice Shores">
-      <defs>
-        <linearGradient id="chrome2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#fff7c8"/><stop offset="0.45" stop-color="#ffd94a"/>
-          <stop offset="0.55" stop-color="#ff8a3a"/><stop offset="1" stop-color="#e83a2a"/>
-        </linearGradient>
-        <linearGradient id="sunG2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#ffd94a"/><stop offset="1" stop-color="#ff5a3a"/>
-        </linearGradient>
-        <linearGradient id="slitG" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#ff9a3a"/><stop offset="1" stop-color="#ff5a2a"/>
-        </linearGradient>
-        <filter id="neon2" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <circle cx="450" cy="140" r="125" fill="url(#sunG2)" opacity="0.95"/>
-      <g fill="url(#slitG)" opacity="0.9"><rect x="330" y="196" width="240" height="8"/><rect x="330" y="216" width="240" height="7"/><rect x="330" y="235" width="240" height="6"/><rect x="330" y="253" width="240" height="5"/></g>
-      <g font-family="Arial Black, Arial, sans-serif" font-style="italic" font-weight="900" filter="url(#neon2)">
-        <text x="450" y="172" font-size="100" text-anchor="middle" fill="url(#chrome2)" stroke="#ff5a3a" stroke-width="1.5">VICE SHORES</text>
-      </g>
-    </svg>
-    <div class="sub">A SUN-SOAKED CITY OF YOUR OWN</div>
-    </div>
-    <div class="press">PRESS START</div>`;
-  document.body.appendChild(cardBox);
-
-  function drawMap(g, W, H, data) {
-    const s = Math.min(W, H) / 440;
-    const ox = (W - 440 * s) / 2, oy = (H - 440 * s) / 2;
-    const X = (x) => ox + (x + 220) * s, Y = (z) => oy + (z + 220) * s;
-    g.clearRect(0, 0, W, H);
-    g.fillStyle = '#16233a';
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = '#2a4a22';
-    g.fillRect(ox, oy, 440 * s, 440 * s);
-    // Sea + sand.
-    g.fillStyle = '#1d5f7a';
-    g.fillRect(X(176), oy, 440 * s - (176 + 220) * s, 440 * s);
-    g.fillStyle = '#e8cf9a';
-    g.fillRect(X(176), oy, 34 * s, 440 * s);
-    g.fillRect(ox, Y(176), 440 * s, 34 * s);
-    // Roads.
-    g.strokeStyle = '#2e2e36';
-    g.lineWidth = 10 * s;
-    for (let i = -4; i <= 4; i += 1) {
-      const c = i * 60;
-      g.beginPath(); g.moveTo(ox, Y(c)); g.lineTo(ox + 440 * s, Y(c)); g.stroke();
-      g.beginPath(); g.moveTo(X(c), oy); g.lineTo(X(c), oy + 440 * s); g.stroke();
-    }
-    // Buildings.
-    g.fillStyle = '#8a94a8';
-    for (const b of data.buildings) g.fillRect(X(b.x - b.w / 2), Y(b.z - b.d / 2), b.w * s, b.d * s);
-    // Pier.
-    g.fillStyle = '#8a6a4a';
-    g.fillRect(X(180), Y(150), 10 * s, 90 * s);
-    // Mission marker.
-    g.fillStyle = '#ffd94a';
-    const mx = X(data.mission[0]), my = Y(data.mission[1]);
-    g.save(); g.translate(mx, my); g.rotate(Math.PI / 4); g.fillRect(-6, -6, 12, 12); g.restore();
-    // Police dots.
-    for (const p of data.police) {
-      g.fillStyle = '#ff4040';
-      g.beginPath(); g.arc(X(p.x), Y(p.z), 4, 0, 7); g.fill();
-    }
-    // Player arrow.
-    g.save(); g.translate(X(data.player.x), Y(data.player.z)); g.rotate(data.player.heading);
-    g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(0, -8); g.lineTo(6, 6); g.lineTo(-6, 6); g.closePath(); g.fill(); g.restore();
-  }
-
-  let toastClock = 0;
-  function toast(msg) {
-    const t = $('toast');
-    t.textContent = msg;
-    t.style.display = 'block';
-    clearTimeout(toastClock);
-    toastClock = setTimeout(() => {
-      t.style.display = 'none';
-    }, 2600);
-  }
-
-  function update(st) {
-    $('obj').querySelector('.t').textContent = `JOB ${st.mission.id} — ${st.mission.name.toUpperCase()}`;
-    $('obj').querySelector('.s').textContent = st.mission.short;
-    $('obj').querySelector('.bar i').style.width = `${(st.missionDone / 8) * 100}%`;
-    $('rank').textContent = `RANK: ${st.rank} · ${st.progress}`;
-    let starRow = '';
-    for (let i = 0; i < 5; i += 1) starRow += i < st.wanted ? '★' : '<span class="dim">★</span>';
-    $('stars').innerHTML = starRow;
-    $('money').querySelector('.m').textContent = `$${st.money.toLocaleString('en-US')}`;
-    $('money').querySelector('.c').textContent = st.timeStr;
-    $('money').querySelector('.r').textContent = `${st.radio.station} — ${st.radio.song}`;
-    const dispatchRows = $('dispatch').querySelector('.rows');
-    dispatchRows.innerHTML = st.dispatch.map((d) => `<div class="row"><span><b>${d.name}</b> · ${d.tactic}</span><span>${d.dist} m</span></div>`).join('') || '<div class="row"><span>No units on you</span><span>—</span></div>';
-    $('speedo').querySelector('.n').textContent = Math.round(st.speedKmh);
-    $('speedo').querySelector('.car').textContent = st.carName;
-    $('speedo').querySelector('.cond').textContent = st.onFoot ? 'ON FOOT' : `CONDITION ${st.condition}%`;
-    $('weapon').textContent = `${st.weapon.name}${st.weapon.ammo === Infinity ? '' : ' · ' + st.weapon.ammo}`;
-    const crewEl = $('crew');
-    crewEl.innerHTML = st.crew.map((c) => `<div class="k glass"><b>${c.key}</b> ${c.name}</div>`).join('');
-    $('sub').textContent = st.dialogue || '';
-    const bars = $('health').querySelectorAll('.hb i');
-    bars[0].style.width = `${st.health}%`;
-    bars[1].style.width = `${st.armour}%`;
-    drawMap(mini, 180, 180, st.map);
-  }
-
-  function drawBigMap(data) {
-    drawMap(bigMap, 860, 640, data);
-  }
-
-  return {
-    update, toast, drawBigMap,
-    showMap() { mapBox.style.display = 'flex'; },
-    hideMap() { mapBox.style.display = 'none'; },
-    mapOpen() { return mapBox.style.display === 'flex'; },
-    showShop() { shopBox.style.display = 'flex'; },
-    hideShop() { shopBox.style.display = 'none'; },
-    shopOpen() { return shopBox.style.display === 'flex'; },
-    onBuy(fn) { buyers.push(fn); },
+  const api = {
+    update(st) {
+      jobTitle.textContent = `JOB ${st.mission.id} — ${st.mission.name.toUpperCase()}`;
+      jobGoal.textContent = st.mission.goal;
+      barFill.style.width = `${(st.missionDone / 8) * 100}%`;
+      rank.textContent = `RANK: ${st.rank} · ${st.progress}`;
+      let starHtml = '';
+      for (let i = 0; i < 5; i++) {
+        starHtml += i < st.wanted ? '★' : '<span class="dim">★</span>';
+      }
+      stars.innerHTML = starHtml;
+      amount.textContent = `$${st.money.toLocaleString('en-US')}`;
+      clockEl.textContent = st.timeStr;
+      radioEl.textContent = `${st.radio.name} — ${st.radio.song}`;
+      if (!st.dispatch || st.dispatch.length === 0) {
+        dispatchRows.innerHTML = '<div class="row"><span>No units on you</span><span>—</span></div>';
+      } else {
+        dispatchRows.innerHTML = st.dispatch
+          .map((d) => `<div class="row"><span><b>${d.name}</b> · ${d.tactic}</span><span>${d.dist} m</span></div>`)
+          .join('');
+      }
+      speedNum.textContent = String(st.speedKmh);
+      carNameEl.textContent = st.carName;
+      condEl.textContent = st.onFoot ? 'ON FOOT' : `CONDITION ${st.condition}%`;
+      const w = st.weapon;
+      weapon.textContent = Number.isFinite(w.ammo) ? `${w.name} · ${w.ammo}` : w.name;
+      crew.innerHTML = st.crew
+        .map((c) => `<span class="chip glass"><b>${c.key}</b> ${c.name}</span>`)
+        .join('');
+      subtitle.textContent = st.dialogue || '';
+      subtitle.style.display = st.dialogue ? 'block' : 'none';
+      hpFill.style.width = `${Math.max(0, Math.min(100, st.health))}%`;
+      arFill.style.width = `${Math.max(0, Math.min(100, st.armour))}%`;
+      if (st.toast) showToast(st.toast);
+      drawMap(mmapCtx, 180, 180, st);
+      if (mapOverlay.style.display !== 'none') drawMap(mapCtx, 860, 640, st);
+    },
+    showMap() { mapOverlay.style.display = 'flex'; },
+    hideMap() { mapOverlay.style.display = 'none'; },
+    get mapOpen() { return mapOverlay.style.display !== 'none'; },
+    showShop() { shopOverlay.style.display = 'flex'; },
+    hideShop() { shopOverlay.style.display = 'none'; },
+    get shopOpen() { return shopOverlay.style.display !== 'none'; },
+    onBuy(fn) { buyHandler = fn; },
     markOwned(key) {
-      ownedKeys.add(key);
-      for (const el of gridEl.children) {
-        const b = el.querySelector('button');
-        if (b && el.querySelector('h4').textContent && SHOP.find((s) => s.key === key && el.querySelector('h4').textContent === s.name)) {
-          b.disabled = true;
-          b.textContent = 'OWNED';
-        }
+      const btn = buyButtons[key];
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'OWNED';
       }
     },
     showTitle(slots) {
-      titleBox.style.display = 'flex';
-      const box = titleBox.querySelector('.slots');
-      box.innerHTML = slots.map((s) => `<div class="slot"><span><b>${s.label}</b> · ${s.act}</span><span>${s.pct} · ${s.missions} · ${s.money}</span></div>`).join('');
+      slotsWrap.innerHTML = '';
+      for (const s of slots) {
+        const row = el('div', 'slot', slotsWrap);
+        const left = el('span', '', row);
+        left.textContent = s.empty ? `${s.label}` : `${s.label} · ${s.act}`;
+        const right = el('span', '', row);
+        right.textContent = s.empty
+          ? '—'
+          : `${s.percent}% · ${s.missions} · $${s.money.toLocaleString('en-US')}`;
+      }
+      titleScreen.style.display = 'flex';
     },
-    hideTitle() { titleBox.style.display = 'none'; },
-    showTitleCard() { cardBox.style.display = 'flex'; },
-    hideTitleCard() { cardBox.style.display = 'none'; },
+    hideTitle() { titleScreen.style.display = 'none'; },
+    showTitleCard() { titleCard.style.display = 'flex'; },
+    hideTitleCard() { titleCard.style.display = 'none'; },
     setHudVisible(v) {
       hud.style.display = v ? 'block' : 'none';
       vignette.style.display = v ? 'block' : 'none';
     },
+    toast: showToast,
+    setMenuSelected(i) {
+      menuEls.forEach((row, j) => {
+        row.className = j === i ? 'sel' : '';
+        row.textContent = (j === i ? '▸ ' : '   ') + menuItems[j];
+      });
+    },
   };
+  return api;
 }

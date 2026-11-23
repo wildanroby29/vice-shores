@@ -1,83 +1,123 @@
-// render/sky.js — sky dome shader (horizon orange -> pink -> deep blue, sun disc
-// with glow, soft cloud sprites), fog matched to the horizon, and a PMREM
-// environment map built from the sky so paint and glass reflect it.
-export function createSky(scn) {
-  const domeGeo = new THREE.SphereGeometry(900, 32, 16);
-  const domeMat = new THREE.ShaderMaterial({
+// The sky for Vice Shores: a gradient dome, a low sun with a halo, soft
+// clouds, fog, and an environment map baked from the sky itself so car
+// paint and window glass reflect the same sunset the player sees.
+//
+// The dome is a big sphere with a custom shader. Its colour blends three
+// preset colours by height — warm at the horizon, cooler overhead — and adds
+// a sun glow that is sharp near the sun's disc and soft further out. The
+// clouds are nine flat sprites drifting far away, faint at night. Fog hides
+// the far edge of the city. The environment map is rendered once per time
+// of day from a second dome in an empty scene, so reflections always match
+// the current sky.
+
+import { DAYTIME } from '../config.js';
+
+function radialTexture(inner, outer) {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(1, outer);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const SKY_VERT = `
+varying vec3 vDir;
+void main() {
+  vDir = normalize(position);
+  vec4 p = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * p;
+}
+`;
+
+const SKY_FRAG = `
+uniform vec3 uTop;
+uniform vec3 uMid;
+uniform vec3 uBot;
+uniform vec3 uSunDir;
+uniform vec3 uSunCol;
+varying vec3 vDir;
+void main() {
+  float h = clamp(vDir.y, -0.08, 1.0);
+  vec3 col = mix(uBot, uMid, smoothstep(0.0, 0.22, h));
+  col = mix(col, uTop, smoothstep(0.18, 0.65, h));
+  float s = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);
+  col += uSunCol * (pow(s, 120.0) * 2.5 + pow(s, 18.0) * 0.7 + pow(s, 5.0) * 0.18);
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+export function createSky(scene, rng) {
+  const uniforms = {
+    uTop: { value: new THREE.Color(DAYTIME.golden.top) },
+    uMid: { value: new THREE.Color(DAYTIME.golden.mid) },
+    uBot: { value: new THREE.Color(DAYTIME.golden.bot) },
+    uSunDir: { value: new THREE.Vector3(0, 0.3, -1).normalize() },
+    uSunCol: { value: new THREE.Color(DAYTIME.golden.sun) },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: SKY_VERT,
+    fragmentShader: SKY_FRAG,
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: {
-      top: { value: new THREE.Color(0x2e4a8f) },
-      mid: { value: new THREE.Color(0xe87a4a) },
-      bot: { value: new THREE.Color(0xffb36b) },
-      sunDir: { value: new THREE.Vector3(0.6, 0.25, 0.4).normalize() },
-      sunCol: { value: new THREE.Color(0xffd9a0) },
-    },
-    vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: [
-      'varying vec3 vDir; uniform vec3 top; uniform vec3 mid; uniform vec3 bot;',
-      'uniform vec3 sunDir; uniform vec3 sunCol;',
-      'void main(){',
-      '  float h = clamp(vDir.y, -0.08, 1.0);',
-      '  vec3 col = mix(bot, mid, smoothstep(0.0, 0.22, h));',
-      '  col = mix(col, top, smoothstep(0.18, 0.65, h));',
-      '  float s = max(dot(normalize(vDir), normalize(sunDir)), 0.0);',
-      '  col += sunCol * (pow(s, 120.0) * 2.5 + pow(s, 18.0) * 0.7 + pow(s, 5.0) * 0.18);',
-      '  gl_FragColor = vec4(col, 1.0);',
-      '}',
-    ].join('\n'),
   });
-  const dome = new THREE.Mesh(domeGeo, domeMat);
-  scn.add(dome);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
+  scene.add(dome);
 
-  // A few soft cloud sprites drifting high up (radial-gradient texture so they are soft blobs, not squares).
+  // Nine soft clouds, far out and high up. Their positions come from the
+  // seeded stream so the sky is the same for the same seed.
+  const cloudTex = radialTexture('rgba(255,217,192,0.85)', 'rgba(255,217,192,0)');
   const clouds = [];
-  const cv = document.createElement('canvas');
-  cv.width = 256;
-  cv.height = 128;
-  const g2 = cv.getContext('2d');
-  const grad = g2.createRadialGradient(128, 64, 8, 128, 64, 120);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.6, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g2.fillStyle = grad;
-  g2.fillRect(0, 0, 256, 128);
-  const tex = new THREE.CanvasTexture(cv);
-  const mat = new THREE.SpriteMaterial({ color: 0xffd9c0, map: tex, transparent: true, opacity: 0.32, depthWrite: false });
-  for (let i = 0; i < 9; i += 1) {
-    const spr = new THREE.Sprite(mat.clone());
-    spr.material.opacity = 0.32 + ((i * 37) % 10) / 50;
-    const ang = (i / 9) * Math.PI * 2;
-    spr.position.set(Math.cos(ang) * (300 + (i % 3) * 120), 95 + (i % 4) * 16, Math.sin(ang) * (300 + (i % 3) * 100));
-    spr.scale.set(140 + (i % 3) * 50, 22 + (i % 2) * 8, 1);
-    scn.add(spr);
+  for (let i = 0; i < 9; i++) {
+    const ang = rng() * Math.PI * 2;
+    const radius = 300 + rng() * 240;
+    const height = 95 + rng() * 48;
+    const sx = 140 + rng() * 100;
+    const sy = 22 + rng() * 8;
+    const op = 0.32 + rng() * 0.12;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: cloudTex, color: 0xffd9c0, opacity: op, depthWrite: false,
+    }));
+    spr.position.set(Math.cos(ang) * radius, height, Math.sin(ang) * radius);
+    spr.scale.set(sx, sy, 1);
+    spr.userData.baseOpacity = op;
+    scene.add(spr);
     clouds.push(spr);
   }
 
-  const haze = new THREE.Fog(0xf2a35e, 90, 620);
-  scn.fog = haze;
+  let envMap = null;
 
-  let pm = null;
-  function applyTime(when, sunDir) {
-    domeMat.uniforms.top.value.setHex(when.skyTop);
-    domeMat.uniforms.mid.value.setHex(when.skyMid);
-    domeMat.uniforms.bot.value.setHex(when.skyBot);
-    domeMat.uniforms.sunDir.value.copy(sunDir).normalize();
-    domeMat.uniforms.sunCol.value.setHex(when.sun);
-    haze.color.setHex(when.fog);
-    haze.near = when.hour >= 20 ? 60 : 90;
-    haze.far = when.hour >= 20 ? 420 : 620;
-    for (const c of clouds) c.material.opacity = when.hour >= 20 ? 0.12 : 0.3;
+  function buildEnvironment(renderer) {
+    // Bake an environment map from the sky itself: a second dome in an
+    // empty scene, blurred a little, so paint and glass reflect this sky.
+    const envScene = new THREE.Scene();
+    const envDome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
+    envScene.add(envDome);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const target = pmrem.fromScene(envScene, 0.04);
+    if (envMap) envMap.dispose();
+    envMap = target.texture;
+    scene.environment = envMap;
+    pmrem.dispose();
   }
 
-  // Build the environment map from the sky itself (needs a renderer, once per time).
-  function buildEnvironment(rdr) {
-    if (!pm) pm = new THREE.PMREMGenerator(rdr);
-    const env = new THREE.Scene();
-    const copy = new THREE.Mesh(domeGeo, domeMat);
-    env.add(copy);
-    const tex = pm.fromScene(env, 0.04).texture;
-    scn.environment = tex;
+  function applyTime(preset, sunDir, isNight) {
+    uniforms.uTop.value.setHex(preset.top);
+    uniforms.uMid.value.setHex(preset.mid);
+    uniforms.uBot.value.setHex(preset.bot);
+    uniforms.uSunCol.value.setHex(preset.sun);
+    uniforms.uSunDir.value.copy(sunDir).normalize();
+    scene.fog = new THREE.Fog(preset.fog, isNight ? 60 : 90, isNight ? 420 : 620);
+    for (const cl of clouds) {
+      cl.material.opacity = cl.userData.baseOpacity * (isNight ? 0.375 : 1);
+    }
   }
 
   return { dome, clouds, applyTime, buildEnvironment };

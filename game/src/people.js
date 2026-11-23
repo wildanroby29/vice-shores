@@ -1,235 +1,314 @@
-// people.js — people built from explicit geometry: a capsule torso with a
-// belt, a neck, a sphere head with nose/eyes/mouth and hair, cylinder+sphere
-// limbs with hands and shoes, and a walk/run cycle. The hero Rook is a brown
-// leather jacket over a shirt, blue jeans, and carries a pistol he can aim
-// (parts.aim(true) raises the right arm into a two-hand aim pose).
-const SKINS = [0xe8b88a, 0xc98a5a, 0x8a5a3a, 0xf2c9a0, 0x6b4226];
-const SHIRTS = [0x3a6ac2, 0xc23a5a, 0x3a9a5a, 0xe8b83a, 0x7a3aa8, 0xe87a3a, 0x2a8a8a, 0xf2f2f2];
-const PANTS = [0x2a2a3a, 0x3a3a4a, 0x5a4a3a, 0x6b7a8a];
-const HAIRS = [0x1a1a1a, 0x4a2a1a, 0x8a6a3a, 0xaaaaaa, 0x6b3a1a];
+// People for Vice Shores: Rook and the pedestrians who fill the city.
+//
+// A person is a capsule torso, capsule limbs on pivot groups at the hips
+// and shoulders (so the walk cycle can swing them), a sphere head with a
+// nose and eyes, hair in one of four styles, and — for officers and for
+// Rook when he is aiming — a pistol in the right hand. Rook wears a brown
+// leather jacket; officers wear navy with a gold badge. Pedestrians get
+// random colours from the seeded stream, walk toward a target, and turn at
+// the edge of the world. Fallen pedestrians are frozen where they lie.
 
-export function makePerson(rng, opts = {}) {
-  const level = opts.detail || 'full';
-  const grp = new THREE.Group();
-  const skin = opts.skin ?? SKINS[Math.floor(rng() * SKINS.length)];
-  const shirt = opts.shirt ?? SHIRTS[Math.floor(rng() * SHIRTS.length)];
-  const pants = opts.pants ?? PANTS[Math.floor(rng() * PANTS.length)];
-  const hair = opts.hair ?? HAIRS[Math.floor(rng() * HAIRS.length)];
-  const scale = opts.scale ?? (0.92 + rng() * 0.16);
-  grp.scale.setScalar(scale);
+export const SKINS = [0xe8b88a, 0xc98a5a, 0x8a5a3a, 0xf2c9a0, 0x6b4226];
+export const SHIRTS = [
+  0x3a6ac2, 0xc23a5a, 0x3a9a5a, 0xe8b83a,
+  0x7a3aa8, 0xe87a3a, 0x2a8a8a, 0xf2f2f2,
+];
+export const PANTS = [0x2a2a3a, 0x3a3a4a, 0x5a4a3a, 0x6b7a8a];
+export const HAIRS = [0x1a1a1a, 0x4a2a1a, 0x8a6a3a, 0xaaaaaa, 0x6b3a1a];
 
-  if (level === 'low') {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.1, 0.35), new THREE.MeshStandardMaterial({ color: shirt }));
-    body.position.y = 1.0;
-    grp.add(body);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: skin }));
+function capsule(r, len, mat) {
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat);
+  m.castShadow = true;
+  return m;
+}
+
+// Build one person. Options: detail ('full' or 'low'), jacket (Rook's
+// leather), shirt / pants / skin / hair colours, hairStyle (0-3), officer,
+// scale. Returns the group plus the limb pivots and an aim() pose setter.
+export function makePerson(opts = {}) {
+  const detail = opts.detail ?? 'full';
+  const jacket = opts.jacket ?? false;
+  const officer = opts.officer ?? false;
+  const shirtCol = officer ? 0x1a2a4a : (opts.shirt ?? 0x3a6ac2);
+  const pantsCol = opts.pants ?? 0x2a2a3a;
+  const skinCol = opts.skin ?? 0xe8b88a;
+  const hairCol = opts.hair ?? 0x1a1a1a;
+  const hairStyle = opts.hairStyle ?? 0;
+  const scale = opts.scale ?? 1;
+
+  const group = new THREE.Group();
+
+  if (detail !== 'full') {
+    const bodyMat = new THREE.MeshStandardMaterial({ color: shirtCol, roughness: 0.85 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.35), bodyMat);
+    body.position.y = 1.1;
+    group.add(body);
+    const headMat = new THREE.MeshStandardMaterial({ color: skinCol, roughness: 0.8 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), headMat);
     head.position.y = 1.8;
-    grp.add(head);
-    return { group: grp, parts: {} };
+    group.add(head);
+    group.scale.setScalar(scale);
+    return { group, aim() {}, leftArm: null, rightArm: null, leftLeg: null, rightLeg: null };
   }
 
-  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.85, envMapIntensity: 0.35 });
-  const shirtMat = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.85 });
-  const pantsMat = new THREE.MeshStandardMaterial({ color: pants, roughness: 0.9 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: hair, roughness: 0.95 });
-  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: shirtCol, roughness: 0.85 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: pantsCol, roughness: 0.85 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: skinCol, roughness: 0.8 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: hairCol, roughness: 0.9 });
 
-  // Torso: a rounded capsule. A belt band at the waist separates it from
-  // the jeans, so the figure reads as two garments, not one block.
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.55, 4, 10), shirtMat);
+  // Torso: a capsule in the shirt colour — or brown leather for Rook.
+  let torsoMat = shirtMat;
+  if (jacket) {
+    torsoMat = new THREE.MeshStandardMaterial({ color: 0x4a2a12, roughness: 0.55 });
+  } else if (officer) {
+    torsoMat = new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.85 });
+  }
+  const torso = capsule(0.32, 0.55, torsoMat);
   torso.position.y = 1.15;
-  torso.castShadow = true;
-  grp.add(torso);
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.34, 0.09, 12), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 }));
-  belt.position.y = 0.88;
-  grp.add(belt);
-  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.03), new THREE.MeshStandardMaterial({ color: 0xd8b25a, metalness: 0.8, roughness: 0.3 }));
-  buckle.position.set(0, 0.88, 0.33);
-  grp.add(buckle);
+  group.add(torso);
 
-  // Legs: capsules pivoting at the hip, jeans in a distinct colour, shoes.
+  // Belt and buckle.
+  const beltMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 });
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.34, 0.09, 14), beltMat);
+  belt.position.y = 0.88;
+  group.add(belt);
+  const buckleMat = new THREE.MeshStandardMaterial({ color: 0xd8b25a, roughness: 0.3, metalness: 0.8 });
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.03), buckleMat);
+  buckle.position.set(0, 0.88, 0.33);
+  group.add(buckle);
+
+  // Legs on hip pivots, arms on shoulder pivots.
   const legs = [];
-  for (const lx of [-0.14, 0.14]) {
-    const legGroup = new THREE.Group();
-    legGroup.position.set(lx, 0.85, 0);
-    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.55, 4, 8), pantsMat);
+  for (const sx of [-0.14, 0.14]) {
+    const hip = new THREE.Group();
+    hip.position.set(sx, 0.85, 0);
+    const leg = capsule(0.13, 0.55, pantsMat);
     leg.position.y = -0.35;
-    leg.castShadow = true;
-    legGroup.add(leg);
+    hip.add(leg);
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7 });
     const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.1, 0.32), shoeMat);
     shoe.position.set(0, -0.8, 0.05);
-    shoe.castShadow = true;
-    legGroup.add(shoe);
-    grp.add(legGroup);
-    legs.push(legGroup);
+    hip.add(shoe);
+    group.add(hip);
+    legs.push(hip);
   }
 
-  // Arms: capsules pivoting at the shoulder, hands as spheres.
+  const sleeveMat = jacket
+    ? new THREE.MeshStandardMaterial({ color: 0x4a2a12, roughness: 0.55 })
+    : shirtMat;
   const arms = [];
-  for (const ax of [-0.4, 0.4]) {
-    const arm = new THREE.Group();
-    const limb = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.5, 4, 8), shirtMat);
-    limb.position.y = -0.3;
-    limb.castShadow = true;
-    arm.add(limb);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), skinMat);
+  for (const sx of [-0.4, 0.4]) {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(sx, 1.45, 0);
+    const arm = capsule(0.1, 0.5, sleeveMat);
+    arm.position.y = -0.3;
+    shoulder.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), skinMat);
     hand.position.y = -0.62;
-    arm.add(hand);
-    arm.position.set(ax, 1.45, 0);
-    grp.add(arm);
-    arms.push(arm);
+    shoulder.add(hand);
+    group.add(shoulder);
+    arms.push(shoulder);
   }
 
-  // Neck + head: a sphere with a nose, eyes, mouth and hair.
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.16, 8), skinMat);
+  // Neck, head, eyes, nose, mouth.
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.16, 10), skinMat);
   neck.position.y = 1.58;
-  grp.add(neck);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), skinMat);
+  group.add(neck);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), skinMat);
   head.position.y = 1.82;
   head.castShadow = true;
-  grp.add(head);
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-  for (const ex of [-0.09, 0.09]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), eyeMat);
-    eye.position.set(ex, 1.86, 0.23);
-    grp.add(eye);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 5), pupilMat);
-    pupil.position.set(ex, 1.86, 0.265);
-    grp.add(pupil);
+  group.add(head);
+  const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
+  for (const sx of [-0.09, 0.09]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), eyeWhite);
+    eye.position.set(sx, 1.86, 0.23);
+    group.add(eye);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), pupilMat);
+    pupil.position.set(sx, 1.86, 0.265);
+    group.add(pupil);
   }
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.1, 6), skinMat);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.1, 8), skinMat);
   nose.rotation.x = Math.PI / 2;
   nose.position.set(0, 1.78, 0.26);
-  grp.add(nose);
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.02), new THREE.MeshStandardMaterial({ color: 0x7a3a2a }));
+  group.add(nose);
+  const mouthMat = new THREE.MeshStandardMaterial({ color: 0x7a3a2a, roughness: 0.8 });
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.02), mouthMat);
   mouth.position.set(0, 1.7, 0.25);
-  grp.add(mouth);
+  group.add(mouth);
 
-  // Hair variant: cap, short, long, or bun.
-  const style = opts.hairStyle ?? Math.floor(rng() * 4);
-  if (style === 0) {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hairMat);
+  // Hair, one of four styles.
+  if (hairStyle === 0) {
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hairMat,
+    );
     cap.position.y = 1.86;
-    grp.add(cap);
-  } else if (style === 1) {
-    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), hairMat);
+    group.add(cap);
+  } else if (hairStyle === 1) {
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hairMat,
+    );
+    cap.position.y = 1.86;
+    group.add(cap);
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), hairMat);
     bun.position.set(0, 2.08, -0.12);
-    grp.add(bun);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2.2), hairMat);
+    group.add(bun);
+  } else if (hairStyle === 2) {
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hairMat,
+    );
     cap.position.y = 1.86;
-    grp.add(cap);
-  } else if (style === 2) {
-    const mane = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.14), hairMat);
-    mane.position.set(0, 1.75, -0.2);
-    grp.add(mane);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2.2), hairMat);
-    cap.position.y = 1.86;
-    grp.add(cap);
+    group.add(cap);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.14), hairMat);
+    back.position.set(0, 1.75, -0.2);
+    group.add(back);
   } else {
-    // Officer cap with brim.
-    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.29, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.6 }));
-    crown.position.y = 2.02;
-    grp.add(crown);
-    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.22), new THREE.MeshStandardMaterial({ color: 0x1a2a4a }));
+    const capMat = new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.7 });
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.29, 0.12, 14), capMat);
+    cap.position.y = 2.02;
+    group.add(cap);
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.22), capMat);
     brim.position.set(0, 1.97, 0.28);
-    grp.add(brim);
+    group.add(brim);
   }
 
-  // Pistol in the right hand (dark, always there; the aim pose raises it).
-  const gun = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.6 });
+  // A pistol in the right hand, always there, drawn when aiming.
+  const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 });
   const pistol = new THREE.Group();
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.06), gun);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.06), gunMat);
   pistol.add(grip);
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.22), gun);
+  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.22), gunMat);
   barrel.position.set(0, 0.05, 0.12);
   pistol.add(barrel);
   pistol.position.set(0, -0.66, 0.06);
   pistol.rotation.x = Math.PI / 2;
   arms[1].add(pistol);
 
-  if (opts.officer) {
-    // Police uniform: dark navy shirt + badge + belt.
-    torso.material = new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.8 });
-    const badge = new THREE.Mesh(new THREE.CircleGeometry(0.06, 10), new THREE.MeshStandardMaterial({ color: 0xf2c94c, metalness: 0.8, roughness: 0.3 }));
+  // An officer's gold badge on the chest.
+  if (officer) {
+    const badgeMat = new THREE.MeshStandardMaterial({
+      color: 0xf2c94c, roughness: 0.3, metalness: 0.8,
+    });
+    const badge = new THREE.Mesh(new THREE.CircleGeometry(0.06, 12), badgeMat);
     badge.position.set(-0.16, 1.32, 0.31);
-    grp.add(badge);
+    group.add(badge);
   }
-  if (opts.jacket) {
-    // Rook: brown leather jacket (distinct from the jeans) + collar + a
-    // muted white shirt showing under the open jacket.
-    torso.material = new THREE.MeshStandardMaterial({ color: 0x4a2a12, roughness: 0.55 });
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.07, 6, 12), new THREE.MeshStandardMaterial({ color: 0x2a1608, roughness: 0.6 }));
+
+  // Rook's jacket details: a collar and a white shirt panel at the chest.
+  if (jacket) {
+    const collarMat = new THREE.MeshStandardMaterial({ color: 0x2a1608, roughness: 0.7 });
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.07, 8, 16), collarMat);
     collar.rotation.x = Math.PI / 2;
     collar.position.y = 1.5;
-    grp.add(collar);
-    const undershirt = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.06), new THREE.MeshStandardMaterial({ color: 0xdcdcdc, roughness: 0.85 }));
-    undershirt.position.set(0, 1.18, 0.3);
-    grp.add(undershirt);
-    // Jacket sleeves match the jacket, not the shirt.
-    for (const arm of arms) {
-      arm.children[0].material = new THREE.MeshStandardMaterial({ color: 0x4a2a12, roughness: 0.55 });
-    }
+    group.add(collar);
+    const panelMat = new THREE.MeshStandardMaterial({ color: 0xdcdcdc, roughness: 0.85 });
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.06), panelMat);
+    panel.position.set(0, 1.18, 0.3);
+    group.add(panel);
   }
 
-  // Aim pose: right arm forward (pistol up), left arm across to support,
-  // feet in a stable stance. Call with false to lower the weapon.
+  group.scale.setScalar(scale);
+
+  const leftArm = arms[0];
+  const rightArm = arms[1];
+  const leftLeg = legs[0];
+  const rightLeg = legs[1];
+
   function aim(on) {
     if (on) {
-      arms[1].rotation.x = -1.35;
-      arms[0].rotation.x = -0.7;
-      arms[0].rotation.z = 0.35;
-      legs[0].rotation.x = 0.18;
-      legs[1].rotation.x = -0.18;
+      rightArm.rotation.x = -1.35;
+      leftArm.rotation.x = -0.7;
+      leftArm.rotation.z = 0.35;
+      leftLeg.rotation.x = 0.18;
+      rightLeg.rotation.x = -0.18;
     } else {
-      arms[1].rotation.x = 0;
-      arms[0].rotation.x = 0;
-      arms[0].rotation.z = 0;
-      legs[0].rotation.x = 0;
-      legs[1].rotation.x = 0;
+      rightArm.rotation.x = 0;
+      leftArm.rotation.x = 0;
+      leftArm.rotation.z = 0;
+      leftLeg.rotation.x = 0;
+      rightLeg.rotation.x = 0;
     }
   }
 
-  return { group: grp, parts: { legs, arms, head, aim } };
+  return { group, leftArm, rightArm, leftLeg, rightLeg, aim };
 }
 
-export function createPedestrians(scn, rng, level, count) {
+// Rook, the hero: brown leather jacket, blue jeans, dark hair.
+export function makeRook() {
+  const rook = makePerson({
+    detail: 'full', jacket: true, shirt: 0x6b4423, hairStyle: 0,
+    skin: 0xe8b88a, hair: 0x1a1a1a, pants: 0x2a3a5a, scale: 1,
+  });
+  rook.group.position.set(148, 0, -18);
+  rook.group.visible = false;
+  return rook;
+}
+
+// Twenty-six pedestrians, colours and places from the seeded stream.
+export function makePedestrians(rng) {
   const peds = [];
-  for (let i = 0; i < count; i += 1) {
-    const { group, parts } = makePerson(rng, { detail: level });
+  for (let i = 0; i < 26; i++) {
+    const skin = SKINS[Math.floor(rng() * SKINS.length)];
+    const shirt = SHIRTS[Math.floor(rng() * SHIRTS.length)];
+    const pants = PANTS[Math.floor(rng() * PANTS.length)];
+    const hair = HAIRS[Math.floor(rng() * HAIRS.length)];
+    const hairStyle = Math.floor(rng() * 4);
+    const scale = 0.92 + rng() * 0.16;
     const x = -190 + rng() * 340;
     const z = -190 + rng() * 380;
-    group.position.set(x, 0, z);
-    group.rotation.y = rng() * Math.PI * 2;
-    scn.add(group);
-    peds.push({ group, parts, speed: 1 + rng() * 1.4, dir: rng() * Math.PI * 2, phase: rng() * 6, tx: x, tz: z });
+    const rot = rng() * Math.PI * 2;
+    const speed = 1 + rng() * 1.4;
+    const walkDir = rng() * Math.PI * 2;
+    const phase = rng() * Math.PI * 2;
+    const person = makePerson({
+      detail: 'full', skin, shirt, pants, hair, hairStyle, scale,
+    });
+    person.group.position.set(x, 0, z);
+    person.group.rotation.y = rot;
+    peds.push({
+      ...person,
+      speed,
+      phase,
+      walkDir,
+      target: { x: x + Math.sin(walkDir) * 30, z: z + Math.cos(walkDir) * 30 },
+      fallen: false,
+    });
   }
-  function update(dt, t) {
-    for (const ped of peds) {
-      if (ped.fallen) continue; // lying on the ground (shot staging): frozen
-      ped.tx += Math.cos(ped.dir) * ped.speed * dt;
-      ped.tz += Math.sin(ped.dir) * ped.speed * dt;
-      if (Math.abs(ped.tx) > 200 || Math.abs(ped.tz) > 205) ped.dir += Math.PI / 2 + Math.random() * 0.6;
-      ped.group.position.x = ped.tx;
-      ped.group.position.z = ped.tz;
-      ped.group.rotation.y = -ped.dir + Math.PI / 2;
-      const swing = Math.sin(t * 6 + ped.phase) * 0.5;
-      if (ped.parts.legs) {
-        if (ped.aiming) {
-          // Enemy officer holding an aim pose (pistol up, stable stance).
-          ped.parts.legs[0].rotation.x = 0.18;
-          ped.parts.legs[1].rotation.x = -0.18;
-          ped.parts.arms[0].rotation.x = -0.7;
-          ped.parts.arms[0].rotation.z = 0.35;
-          ped.parts.arms[1].rotation.x = -1.35;
-        } else {
-          ped.parts.legs[0].rotation.x = swing;
-          ped.parts.legs[1].rotation.x = -swing;
-          ped.parts.arms[0].rotation.x = -swing * 0.7;
-          ped.parts.arms[1].rotation.x = swing * 0.7;
-        }
-      }
+  return peds;
+}
+
+// Walk the pedestrians: toward their target, turning at the world's edge,
+// legs and arms swinging in step. Fallen pedestrians are frozen.
+export function updatePedestrians(peds, dt, time) {
+  for (const p of peds) {
+    if (p.fallen) continue;
+    const g = p.group;
+    const dx = p.target.x - g.position.x;
+    const dz = p.target.z - g.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1) {
+      const ang = Math.random() * Math.PI * 2;
+      p.target.x = THREE.MathUtils.clamp(g.position.x + Math.sin(ang) * 40, -200, 200);
+      p.target.z = THREE.MathUtils.clamp(g.position.z + Math.cos(ang) * 40, -200, 225);
+      continue;
     }
+    const vx = (dx / dist) * p.speed * dt;
+    const vz = (dz / dist) * p.speed * dt;
+    const nx = g.position.x + vx;
+    const nz = g.position.z + vz;
+    if (Math.abs(nx) > 208 || nz < -208 || nz > 232) {
+      const ang = Math.random() * Math.PI * 2;
+      p.target.x = THREE.MathUtils.clamp(g.position.x + Math.sin(ang) * 40, -200, 200);
+      p.target.z = THREE.MathUtils.clamp(g.position.z + Math.cos(ang) * 40, -200, 225);
+      continue;
+    }
+    g.position.x = nx;
+    g.position.z = nz;
+    g.rotation.y = Math.atan2(dx, dz);
+    const swing = Math.sin(time * 6 + p.phase) * 0.5;
+    p.leftLeg.rotation.x = swing;
+    p.rightLeg.rotation.x = -swing;
+    p.leftArm.rotation.x = -swing * 0.7;
+    p.rightArm.rotation.x = swing * 0.7;
   }
-  return { peds, update };
 }
