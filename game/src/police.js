@@ -73,7 +73,9 @@ export function createHelicopter(scene) {
   fuselage.castShadow = true;
   group.add(fuselage);
 
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
+  // White body with a blue cheatline and fin: a white/blue helicopter.
+  // The cheatline colour is the only dark accent on the fuselage.
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0x1a4a8a, roughness: 0.4 });
   const cheatline = new THREE.Mesh(
     extrudeProfile(
       [[2.55, -0.15], [2.6, 0.15], [-2.35, 0.15], [-2.4, -0.15]],
@@ -137,8 +139,11 @@ export function createHelicopter(scene) {
     rotor.add(blade);
   }
   group.add(rotor);
+  // Rotor disc: a faint neutral-grey disc, never a coloured ellipse.
+  // Opacity 0.10 keeps the spinning rotor readable without painting a
+  // pink or grey blob across the sky.
   const discMat = new THREE.MeshBasicMaterial({
-    color: 0xaaaaaa, transparent: true, opacity: 0.18,
+    color: 0x8a8a8a, transparent: true, opacity: 0.10,
     side: THREE.DoubleSide, depthWrite: false,
   });
   const disc = new THREE.Mesh(new THREE.CircleGeometry(4.5, 32), discMat);

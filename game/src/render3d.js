@@ -347,7 +347,15 @@ export function createGame(canvas, opts = {}) {
       camera.lookAt(0, 6, 0);
       camera.fov = 62;
     } else if (camMode === 'aerial') {
-      camera.position.set(40, 85, -80);
+      // Slow cinematic orbit around the city centre: the title screen
+      // drifts around the skyline instead of sitting on a fixed frame,
+      // so the city reads as a real place with depth. The orbit starts
+      // at the composition the screenshots verified (camera near
+      // (40, 85, -80), looking at (150, 0, 110)) and creeps at
+      // 0.03 rad/s, so a still taken at ~1.5 s matches that frame.
+      const a = -2.09 + time * 0.03;
+      const R = 219;
+      camera.position.set(150 + Math.cos(a) * R, 85, 110 + Math.sin(a) * R);
       camera.lookAt(150, 0, 110);
       camera.fov = 62;
     } else if (camMode === 'titlecard') {

@@ -9,6 +9,11 @@ export const ACT = {
   RADIO: 128,
   WEAPON: 256,
   CONFIRM: 512,
+  // Crew abilities, matching the numbered key chips on the HUD ability
+  // cards: 1 Swap Plates (Marla), 2 Quick Fix (Dex), 3 Eyes Out (Lena).
+  ABILITY1: 1024,
+  ABILITY2: 2048,
+  ABILITY3: 4096,
 };
 
 const PRESS_KEYS = {
@@ -22,6 +27,9 @@ const PRESS_KEYS = {
   Escape: ACT.PAUSE,
   KeyR: ACT.RADIO,
   KeyQ: ACT.WEAPON,
+  Digit1: ACT.ABILITY1,
+  Digit2: ACT.ABILITY2,
+  Digit3: ACT.ABILITY3,
 };
 
 export function createInput() {
@@ -56,6 +64,9 @@ export function createInput() {
   window.addEventListener('blur', () => {
     held.clear();
     shiftHeld = false;
+    // Drop anything queued while the window was unfocused, so a key
+    // pressed just before alt-tabbing does not fire on the way back.
+    queued = 0;
   });
 
   function down(...codes) {

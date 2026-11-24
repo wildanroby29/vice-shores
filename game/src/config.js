@@ -1,7 +1,17 @@
+// Vice Shores — shared tuning: world size, daylight, ranks, crew, jobs,
+// paint, districts, abilities and the police dispatch roster. Every other
+// module reads its numbers from here, so a look change is one edit in this
+// file. The palette is a sun-soaked coastal city at golden hour: asphalt
+// grey roads, a blue sea, warm sand, and a sky that fades into the same
+// colour as the fog so the horizon never shows a hard band.
+
 export const STEP = 1 / 60;
 export const SAVE_KEY = 'vice-shores.saves.v1';
 export const BEST_KEY = 'vice-shores.best.v1';
 
+// The playable city is a grid of blocks around a beach and a pier.
+// half is the half-width of the drivable area; block is the block pitch;
+// street is the road width; beachX / pierX / pierZ place the shore.
 export const WORLD = {
   half: 210,
   block: 44,
@@ -11,6 +21,12 @@ export const WORLD = {
   pierZ: 150,
 };
 
+// Daylight presets. Each one carries the sun colour and strength, the
+// hemisphere light, the fog colour, and the three sky-gradient stops.
+// The rule that keeps the horizon clean: fog is always the same colour as
+// the sky's bottom stop, so distant sea and distant sky dissolve into one
+// another instead of meeting on a visible line. Golden hour is bright —
+// the sun sits high enough that the streets stay readable, never near-black.
 export const DAYTIME = {
   golden: {
     hour: 17.5, sun: 0xffb36b, sunStrength: 2.6, hemiStrength: 0.95,
@@ -18,15 +34,15 @@ export const DAYTIME = {
   },
   sunset: {
     hour: 18.8, sun: 0xff8f4d, sunStrength: 2.2, hemiStrength: 1.0,
-    fog: 0xe8795a, top: 0x4a5a7a, mid: 0xd9553f, bot: 0xff9a3d,
+    fog: 0xe8795a, top: 0x4a5a7a, mid: 0xd9553f, bot: 0xe8795a,
   },
   afternoon: {
     hour: 16.0, sun: 0xffd9a0, sunStrength: 2.8, hemiStrength: 0.68,
-    fog: 0xf0c98f, top: 0x4a7fc1, mid: 0xf2b06a, bot: 0xffd9a0,
+    fog: 0xf0c98f, top: 0x4a7fc1, mid: 0xf2b06a, bot: 0xf0c98f,
   },
   night: {
     hour: 20.5, sun: 0xc9d6ea, sunStrength: 0.55, hemiStrength: 1.0,
-    fog: 0x26262c, top: 0x2a3450, mid: 0x3a4a6a, bot: 0x5a3040,
+    fog: 0x26262c, top: 0x2a3450, mid: 0x3a4a6a, bot: 0x26262c,
   },
 };
 
@@ -104,13 +120,15 @@ export const JOBS = [
   },
 ];
 
+// Ground paint. Asphalt is a cool grey, not navy; the sea is a clear
+// coastal blue; the sand stays warm so the beach reads against both.
 export const PAINT = {
-  asphalt: 0x44474d,
+  asphalt: 0x3d3f45,
   lane: 0xd8c25a,
   sidewalk: 0xb9b4a8,
   sand: 0xe8cf9a,
-  sea: 0x1568b8,
-  seaDeep: 0x0d3a6e,
+  sea: 0x1d6f9a,
+  seaDeep: 0x14507a,
   grass: 0x4d7a3a,
 };
 
@@ -127,6 +145,18 @@ export const ABILITIES = [
   { name: 'Swap Plates', role: 'Lose a star', crew: 'Marla' },
   { name: 'Quick Fix', role: 'Repair the car', crew: 'Dex' },
   { name: 'Eyes Out', role: 'Cop radar', crew: 'Lena' },
+];
+
+// The dispatch roster for a four-star chase: six named units, each with a
+// fixed tactic, so the HUD reads like a real police board instead of a
+// random list. The order here is the order the panel shows them.
+export const DISPATCH_ROSTER = [
+  { name: 'KITE-1', tactic: 'MARKSMAN' },
+  { name: 'MARLIN-3', tactic: 'PURSUIT' },
+  { name: 'CORAL-48', tactic: 'MARKSMAN' },
+  { name: 'TIDE-7', tactic: 'SPOTLIGHT' },
+  { name: 'REEF-22', tactic: 'FLANKING' },
+  { name: 'SURGE-9', tactic: 'FLANKING' },
 ];
 
 export const RADIO_LINES = [

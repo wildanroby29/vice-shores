@@ -35,7 +35,12 @@ export function makePerson(opts = {}) {
     head.position.y = 1.8;
     group.add(head);
     group.scale.setScalar(scale);
-    return { group, aim() {}, leftArm: null, rightArm: null, leftLeg: null, rightLeg: null };
+    return {
+      group,
+      aim() {},
+      lieDown() {},
+      leftArm: null, rightArm: null, leftLeg: null, rightLeg: null,
+    };
   }
 
   const shirtMat = new THREE.MeshStandardMaterial({ color: shirtCol, roughness: 0.85 });
@@ -195,11 +200,13 @@ export function makePerson(opts = {}) {
 
   function aim(on) {
     if (on) {
+      // Two-handed pistol stance: right arm extended, left arm bracing
+      // across to support it, legs staggered in a combat crouch.
       rightArm.rotation.x = -1.35;
-      leftArm.rotation.x = -0.7;
-      leftArm.rotation.z = 0.35;
-      leftLeg.rotation.x = 0.18;
-      rightLeg.rotation.x = -0.18;
+      leftArm.rotation.x = -1.05;
+      leftArm.rotation.z = 0.55;
+      leftLeg.rotation.x = 0.22;
+      rightLeg.rotation.x = -0.22;
     } else {
       rightArm.rotation.x = 0;
       leftArm.rotation.x = 0;
@@ -209,7 +216,22 @@ export function makePerson(opts = {}) {
     }
   }
 
-  return { group, leftArm, rightArm, leftLeg, rightLeg, aim };
+  // Fallen body: arms splayed out to the sides and legs slightly apart,
+  // so a downed figure reads as a body on the ground rather than a
+  // standing figure tipped over. The caller lays the whole group flat
+  // (rotation.z = PI/2, y = 0.32) after calling this.
+  function lieDown() {
+    leftArm.rotation.z = 1.1;
+    rightArm.rotation.z = -1.1;
+    leftArm.rotation.x = 0.2;
+    rightArm.rotation.x = 0.2;
+    leftLeg.rotation.x = 0.25;
+    rightLeg.rotation.x = -0.15;
+    leftLeg.rotation.z = 0.15;
+    rightLeg.rotation.z = -0.15;
+  }
+
+  return { group, leftArm, rightArm, leftLeg, rightLeg, aim, lieDown };
 }
 
 export function makeRook() {

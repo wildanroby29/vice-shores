@@ -16,3 +16,17 @@ export function pickOne(rng, list) {
 export function range(rng, min, max) {
   return min + rng() * (max - min);
 }
+
+// Fisher-Yates shuffle that returns a new array, leaving the input
+// untouched — used wherever a list (radio order, spawn order) should be
+// dealt out in a fresh order each run without mutating the source.
+export function shuffle(rng, list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
+}

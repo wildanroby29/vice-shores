@@ -412,13 +412,17 @@ export function buildCity(rng) {
     palmSpots.push({ x: 150, z });
   }
 
+  // Beach planting: low flat shrubs with a flower bed, kept small and
+  // squashed (never a big green dome) and kept out of the boulevard and
+  // market sightlines, so no planter ever photobombs a camera line.
   const flowerCols = [0xe85a8a, 0xf2c94c, 0xe85a3a, 0x9a5ae8];
   for (let z = -180; z <= 180; z += 24) {
     if (z >= -30 && z <= 70) continue;
+    if (z >= 100 && z <= 170) continue;
     const bushMat = new THREE.MeshStandardMaterial({ color: 0x3a6a2a, roughness: 0.9 });
-    const bush = new THREE.Mesh(new THREE.SphereGeometry(0.55 + rng() * 0.2, 12, 10), bushMat);
-    bush.scale.y = 0.45;
-    bush.position.set(203, 0.35, z);
+    const bush = new THREE.Mesh(new THREE.SphereGeometry(0.38 + rng() * 0.12, 12, 10), bushMat);
+    bush.scale.y = 0.3;
+    bush.position.set(203, 0.25, z);
     bush.castShadow = true;
     group.add(bush);
     const bedMat = new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.9 });
@@ -484,22 +488,24 @@ export function buildCity(rng) {
   }
 
   const pierPoleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.6, metalness: 0.4 });
+  // Lamp globes are small and bright (emissive 1.2) with a tight halo, so
+  // they read as lamps at golden hour instead of blown-out white balls.
   const globeMat = new THREE.MeshStandardMaterial({
-    color: 0xfff2c8, emissive: 0xffd98a, emissiveIntensity: 0.8, roughness: 0.4,
+    color: 0xfff2c8, emissive: 0xffd98a, emissiveIntensity: 1.2, roughness: 0.4,
   });
   for (let z = 160; z <= 232; z += 12) {
     for (const lx of [181.2, 188.8]) {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 3.4, 8), pierPoleMat);
       pole.position.set(lx, 2.5, z);
       group.add(pole);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), globeMat);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), globeMat);
       head.position.set(lx, 4.3, z);
       group.add(head);
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: glowTex, color: 0xffd98a, opacity: 0.15, transparent: true, depthWrite: false,
+        map: glowTex, color: 0xffd98a, opacity: 0.12, transparent: true, depthWrite: false,
       }));
       halo.position.set(lx, 4.3, z);
-      halo.scale.set(1.2, 1.2, 1);
+      halo.scale.set(0.8, 0.8, 1);
       group.add(halo);
     }
   }
@@ -581,14 +587,14 @@ export function buildCity(rng) {
     arm.position.set(x + armDx * 0.7, 5.35, z + armDz * 0.7);
     if (armDz !== 0) arm.rotation.y = Math.PI / 2;
     group.add(arm);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), globeMat);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), globeMat);
     head.position.set(x + armDx * 1.4, 5.35, z + armDz * 1.4);
     group.add(head);
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: 0xffd98a, opacity: 0.15, transparent: true, depthWrite: false,
+      map: glowTex, color: 0xffd98a, opacity: 0.12, transparent: true, depthWrite: false,
     }));
     halo.position.set(x + armDx * 1.4, 5.35, z + armDz * 1.4);
-    halo.scale.set(0.9, 0.9, 1);
+    halo.scale.set(0.7, 0.7, 1);
     group.add(halo);
   }
   for (let z = -168; z <= 190; z += 28) {

@@ -1,3 +1,13 @@
+// Vice Shores — short-lived combat and driving effects.
+//
+// Smoke puffs, flames, muzzle flashes, tracers and sparks. Everything is a
+// sprite or a thin box that ages out on its own: each effect carries its
+// age and lifetime, update() ticks them, and anything past its life is
+// removed from the scene and disposed. The list is capped so a long
+// firefight can never pile up hundreds of live sprites. Muzzle flashes are
+// deliberately small (a third of a metre) so they read as a gunshot, not
+// an explosion; tracers are thin additive boxes that fade in a blink.
+
 function makeRadial(inner, outer) {
   const c = document.createElement('canvas');
   c.width = 64;
@@ -26,6 +36,8 @@ export function createEffects(scene) {
     }
   }
 
+  // A drifting smoke puff that grows and thins as it rises. Colour and
+  // size are the caller's: tyre smoke is pale grey, gun smoke is warm.
   function smoke(x, y, z, opts = {}) {
     const size = opts.size ?? 1.5;
     const life = opts.life ?? 0.9;
@@ -50,6 +62,7 @@ export function createEffects(scene) {
     });
   }
 
+  // A short additive flame, used when a police car takes a hit.
   function flame(x, y, z, size) {
     const mat = new THREE.SpriteMaterial({
       map: fireTex, color: 0xffc46b, opacity: 0.9,
@@ -68,6 +81,9 @@ export function createEffects(scene) {
     });
   }
 
+  // Small muzzle flash at the barrel: a third of a metre across, gone in
+  // under a tenth of a second. Small is the point — it marks the shot
+  // without hiding the shooter.
   function muzzle(x, y, z) {
     const mat = new THREE.SpriteMaterial({
       map: fireTex, color: 0xffe9a8, opacity: 0.85,
@@ -86,6 +102,7 @@ export function createEffects(scene) {
     });
   }
 
+  // A thin glowing line from muzzle to target, fading fast.
   function tracer(from, to) {
     const a = new THREE.Vector3(...from);
     const b = new THREE.Vector3(...to);
@@ -108,6 +125,7 @@ export function createEffects(scene) {
     });
   }
 
+  // A burst of bright sparks that fly out and fade.
   function sparks(x, y, z, n) {
     for (let i = 0; i < n; i++) {
       const mat = new THREE.SpriteMaterial({
@@ -134,6 +152,7 @@ export function createEffects(scene) {
     }
   }
 
+  // Tick every live effect; drop the finished ones.
   function update(dt) {
     for (let i = live.length - 1; i >= 0; i--) {
       const item = live[i];

@@ -1,7 +1,7 @@
 // Hands the Vice Shores entry in.
 //
 // This program is the entrypoint the make.fun scorer runs: it copies the
-// game (game/) and the four staged screenshots (screenshots/) from beside
+// game (game/) and the three staged screenshots (screenshots/) from beside
 // this file into the output directory, then writes dossier.json there with
 // the vendored make.fun library. The dossier is the judge's view of the
 // entry — a contact sheet of the screenshots plus the game's sources, each

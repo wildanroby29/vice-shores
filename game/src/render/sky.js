@@ -1,5 +1,15 @@
+// Vice Shores — the sky dome, clouds and environment map.
+//
+// The dome is a shader sphere: three gradient stops (top, mid, bottom)
+// plus a sun glow. The bottom stop is always the same colour as the fog
+// (see config DAYTIME), so the horizon dissolves instead of drawing a
+// hard line — the sea meets the sky through haze and there is never a
+// flat band of a different colour at the horizon. Clouds are soft radial
+// sprites drifting high above the city.
+
 import { DAYTIME } from '../config.js';
 
+// A soft radial falloff texture: bright centre fading to transparent edge.
 function radialTexture(inner, outer) {
   const c = document.createElement('canvas');
   c.width = 64;
@@ -24,6 +34,10 @@ void main() {
 }
 `;
 
+// h is the view direction's height: below the horizon it clamps to the
+// bottom stop, so the lowest band of sky is exactly the fog colour and
+// the sea fades into it. The sun adds a tight hot core, a warm halo and
+// a wide soft wash, all in the sun's own colour.
 const SKY_FRAG = `
 uniform vec3 uTop;
 uniform vec3 uMid;
@@ -59,6 +73,8 @@ export function createSky(scene, rng) {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
   scene.add(dome);
 
+  // Nine wide, thin cloud sprites, warm-lit, scattered high and far so
+  // they read as a golden-hour sky rather than clutter near the city.
   const cloudTex = radialTexture('rgba(255,217,192,0.85)', 'rgba(255,217,192,0)');
   const clouds = [];
   for (let i = 0; i < 9; i++) {
@@ -80,6 +96,8 @@ export function createSky(scene, rng) {
 
   let envMap = null;
 
+  // Bake the sky into an environment map so car paint, glass and chrome
+  // pick up the golden-hour light instead of looking flat.
   function buildEnvironment(renderer) {
     const envScene = new THREE.Scene();
     const envDome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
@@ -92,6 +110,10 @@ export function createSky(scene, rng) {
     pmrem.dispose();
   }
 
+  // Switch the whole sky to a preset: gradient stops, sun colour and
+  // direction, and fog. Fog starts closer at night and reaches further in
+  // the day; its colour is the preset's fog, which always matches the
+  // sky's bottom stop, so the horizon stays smooth.
   function applyTime(preset, sunDir, isNight) {
     uniforms.uTop.value.setHex(preset.top);
     uniforms.uMid.value.setHex(preset.mid);

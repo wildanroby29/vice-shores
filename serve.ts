@@ -50,10 +50,19 @@ const server = createServer(async (req, res) => {
       return;
     }
     const body = await readFile(file);
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
       'Cache-Control': 'no-store',
-    });
+      'Content-Length': String(body.length),
+    };
+    // HEAD asks for the headers only (used by the screenshot tool to
+    // probe a file without downloading it); the body is sent for GET.
+    if (req.method === 'HEAD') {
+      res.writeHead(200, headers);
+      res.end();
+      return;
+    }
+    res.writeHead(200, headers);
     res.end(body);
   } catch (e) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });

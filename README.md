@@ -31,6 +31,9 @@ library is three.js, vendored under `game/vendor/`.
   (Vice Customs) with six upgrades.
 - A HUD with a minimap and a full map, mission objective, wanted stars,
   dispatch list, money and clock, health and armour, and save slots.
+- A title screen that slowly orbits the city at golden hour, and a night
+  market with striped stalls, paper lanterns and string lights where the
+  on-foot firefight happens.
 
 ## Controls
 
@@ -45,13 +48,14 @@ library is three.js, vendored under `game/vendor/`.
 | G | Vice Customs (upgrades) |
 | R | Radio station |
 | Q | Switch weapon |
+| 1 / 2 / 3 | Crew ability: Swap Plates, Quick Fix, Eyes Out |
 | P / Esc | Pause |
 
 ## Screenshots
 
-The four screenshots in `screenshots/` are real renders of the game itself:
-the title card over the boulevard at golden hour, a five-star police chase
-at night, a firefight on foot at sunset, and the pier at high tide.
+The three screenshots in `screenshots/` are real renders of the game itself:
+the title card over the city at golden hour (slow aerial orbit), a four-star
+police chase on the boulevard, and a firefight on foot in the night market.
 
 ## Tech
 

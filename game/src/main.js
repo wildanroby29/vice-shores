@@ -4,6 +4,7 @@ import { createHud } from './hud.js';
 import { runShot } from './shots.js';
 import * as audio from './audio.js';
 import { ACT, createInput } from './input.js';
+import { ABILITIES } from './config.js';
 
 const params = new URLSearchParams(location.search);
 const shotName = params.get('shot');
@@ -149,6 +150,17 @@ if (shotName) {
       if (p & ACT.WEAPON) {
         const w = game.missions.cycleWeapon();
         hud.toast(w.name);
+      }
+      // Crew abilities on the HUD key chips (1/2/3): pressing the key
+      // calls the ability out by name, so the chips are controls, not
+      // just decoration.
+      for (let i = 0; i < 3; i++) {
+        const flag = [ACT.ABILITY1, ACT.ABILITY2, ACT.ABILITY3][i];
+        if (p & flag) {
+          const a = ABILITIES[i];
+          hud.toast(`${a.name} — ${a.crew}: ${a.role}`);
+          audio.blip();
+        }
       }
       if (p & ACT.CAMERA) orbitView = !orbitView;
     } else if (game.screen === 'paused') {

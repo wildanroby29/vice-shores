@@ -172,9 +172,11 @@ export function makeCar(colour, opts = {}) {
 export function makeHeroCar() {
   const car = makeCar(0xe87a1a, { detail: 'full', spoiler: true, clearcoat: 0.45 });
   car.group.position.set(150, 0, -20);
+  // Contact shadow under the hero car: faint (0.07) so it grounds the car
+  // without painting a grey puddle on the asphalt.
   const shadowGeo = new THREE.CircleGeometry(1, 24);
   const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false,
+    color: 0x000000, transparent: true, opacity: 0.07, depthWrite: false,
   });
   const shadow = new THREE.Mesh(shadowGeo, shadowMat);
   shadow.rotation.x = -Math.PI / 2;

@@ -59,6 +59,7 @@ const CSS = `
 #crew { position: absolute; right: 16px; bottom: 168px; display: flex; gap: 8px; }
 #crew .ability { display: flex; align-items: center; gap: 7px; padding: 6px 9px; }
 #crew .ability .portrait { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; color: #0d1526; border: 2px solid rgba(255,255,255,0.7); flex: 0 0 auto; }
+#crew .ability .keychip { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; color: #0d1526; border: 2px solid rgba(255,255,255,0.75); flex: 0 0 auto; text-shadow: none; }
 #crew .ability .an { font-size: 11.5px; font-weight: 800; line-height: 1.15; }
 #crew .ability .ar { font-size: 10.5px; opacity: 0.85; line-height: 1.15; }
 #subtitle { position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%); max-width: 640px; display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 15px; font-weight: 600; text-align: left; }
@@ -165,6 +166,14 @@ function portraitHtml(name, size) {
   const col = PORTRAIT_COLOURS[name] || '#b9b4a8';
   const initial = (name || '?').trim().charAt(0).toUpperCase();
   return `<span class="portrait" style="width:${size}px;height:${size}px;background:${col};font-size:${Math.round(size * 0.45)}px">${initial}</span>`;
+}
+
+// Circular key chip for an ability card: the crew member's number key
+// (1/2/3) in a coloured circle, so each ability reads as a key you press.
+function keyChipHtml(crewName) {
+  const c = CREW.find((x) => x.name === crewName) || CREW[0];
+  const col = PORTRAIT_COLOURS[c.name] || '#b9b4a8';
+  return `<span class="keychip" style="background:${col}">${c.key}</span>`;
 }
 
 function drawMap(ctx, W, H, st) {
@@ -487,7 +496,7 @@ export function createHud() {
       weapon.innerHTML = `<div class="wslots">${weapons.map((w) => `<div class="wslot ${w.active ? 'on' : ''}"><span class="wn">${w.name.toUpperCase()}</span><span class="wa">${Number.isFinite(w.ammo) ? w.ammo : '∞'}</span></div>`).join('')}</div>`;
       crew.innerHTML = ABILITIES.map((a) => {
         const c = CREW.find((x) => x.name === a.crew) || CREW[0];
-        return `<span class="ability glass">${portraitHtml(c.name, 30)}<span><span class="an">${a.name}</span><br><span class="ar">${a.role} · ${c.name}</span></span></span>`;
+        return `<span class="ability glass">${portraitHtml(c.name, 30)}${keyChipHtml(c.name)}<span><span class="an">${a.name}</span><br><span class="ar">${a.role} · ${c.name}</span></span></span>`;
       }).join('');
       if (st.dialogue) {
         const m = st.dialogue.match(/^([^:]+):\s*"?([\s\S]*?)"?\s*$/);

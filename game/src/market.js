@@ -24,7 +24,7 @@ function box(w, h, d, mat, x, y, z) {
 const STALL_COLOURS = [0xc23a5a, 0xe8b83a, 0x3a9a5a, 0x2e6ac2, 0xe87a3a];
 const GOODS_COLOURS = [0xe85a8a, 0xf2c94c, 0x7ac2c2, 0xe8b83a, 0x9a5ae8, 0xe85a3a];
 
-function makeStall(i, rng) {
+function makeStall(i, rng, glowTex) {
   const g = new THREE.Group();
   const col = STALL_COLOURS[i % STALL_COLOURS.length];
   const awnMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.85, side: THREE.DoubleSide });
@@ -67,6 +67,12 @@ function makeStall(i, rng) {
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), bulbMat);
   bulb.position.set(0, 2.35, 0.2);
   g.add(bulb);
+  // A paper lantern hangs under each awning so every stall glows warm
+  // from within — the market reads as lit, not just striped canvas.
+  const lantern = makeLantern(glowTex, -0.9, 2.1, 0.35, 0.8);
+  g.add(lantern);
+  const lantern2 = makeLantern(glowTex, 0.9, 2.1, 0.35, 0.8);
+  g.add(lantern2);
   return g;
 }
 
@@ -89,11 +95,14 @@ export function buildMarket(rng) {
   const group = new THREE.Group();
   const glowTex = radialTex('rgba(255,179,107,0.9)', 'rgba(255,179,107,0)');
   const bokehTex = radialTex('rgba(255,217,150,0.8)', 'rgba(255,217,150,0)');
+  // The market row sits well north of the on-foot camera, so no stall ever
+  // crowds the foreground: the nearest awning stays a mid-ground prop,
+  // and the street in front of Rook stays open for the firefight.
   const baseX = 172;
-  const baseZ = 118;
+  const baseZ = 104;
   const stallFronts = [];
   for (let i = 0; i < 5; i++) {
-    const stall = makeStall(i, rng);
+    const stall = makeStall(i, rng, glowTex);
     const sx = baseX;
     const sz = baseZ + i * 7;
     stall.position.set(sx, 0, sz);

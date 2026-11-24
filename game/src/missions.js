@@ -30,6 +30,13 @@ export function createMissions() {
     return name;
   }
 
+  // The next rank on the ladder (or null at TIDE BOSS): the HUD's XP
+  // bar reads "0% TO <next>" from this, so the goal is always visible.
+  function nextRank() {
+    for (const r of RANKS) if (done < r.at) return { name: r.name, at: r.at };
+    return null;
+  }
+
   return {
     get current() {
       return JOBS[index];
@@ -48,6 +55,9 @@ export function createMissions() {
     },
     get rank() {
       return rankName();
+    },
+    get nextRank() {
+      return nextRank();
     },
     get progress() {
       return `${done}/8`;

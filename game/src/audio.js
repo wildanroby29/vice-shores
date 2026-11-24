@@ -63,6 +63,13 @@ export function chime() {
   setTimeout(() => blipTone(1318, 0.24, 'sine', 0.12), 90);
 }
 
+// Two-tone pickup jingle for collectibles and mission rewards: a quick
+// rising pair so a grab reads as a reward, not a menu blip.
+export function pickup() {
+  blipTone(988, 0.09, 'sine', 0.14, 1175);
+  setTimeout(() => blipTone(1318, 0.18, 'sine', 0.12), 80);
+}
+
 export function engineStart() {
   const c = ensureCtx();
   if (!c || engineNodes) return;

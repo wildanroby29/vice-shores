@@ -1,3 +1,13 @@
+// Vice Shores — lights, shadows and tone mapping.
+//
+// One warm sun with soft shadows, a hemisphere fill so shadowed faces stay
+// readable, and a cool fill light from the opposite side so the city never
+// goes muddy. ACES filmic tone mapping at a slightly lifted exposure keeps
+// golden hour bright and readable — the streets are never near-black.
+// blobShadow is the cheap ground haze disc used under cars: a soft black
+// circle whose opacity is set by the caller (the hero car's is kept very
+// faint so it reads as contact shadow, not a grey puddle).
+
 import { DAYTIME } from '../config.js';
 
 export function createLighting(scene, renderer) {
@@ -29,6 +39,9 @@ export function createLighting(scene, renderer) {
   fill.position.set(-60, 40, -80);
   scene.add(fill);
 
+  // Point the sun from the preset's hour: low in the evening, higher in
+  // the afternoon, barely above the horizon at night. Returns the sun
+  // direction (for the sky shader) and whether it is night.
   function setTime(presetKey, target) {
     const preset = DAYTIME[presetKey];
     const isNight = presetKey === 'night';
@@ -49,6 +62,8 @@ export function createLighting(scene, renderer) {
     return { dir, isNight };
   }
 
+  // Flat mode for the dossier's clean reference renders: no tone mapping,
+  // no shadows, a plain grey backdrop.
   function setFlat() {
     renderer.toneMapping = THREE.NoToneMapping;
     renderer.shadowMap.enabled = false;
@@ -57,6 +72,8 @@ export function createLighting(scene, renderer) {
     scene.fog = null;
   }
 
+  // A soft elliptical contact shadow. The caller picks the opacity: hero
+  // cars use a faint one (0.07) so the asphalt still reads through it.
   function blobShadow(scaleX, scaleZ, opacity) {
     const geo = new THREE.CircleGeometry(1, 24);
     const mat = new THREE.MeshBasicMaterial({
