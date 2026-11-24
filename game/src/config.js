@@ -14,11 +14,11 @@ export const WORLD = {
 export const DAYTIME = {
   golden: {
     hour: 17.5, sun: 0xffb36b, sunStrength: 2.6, hemiStrength: 0.95,
-    fog: 0xffb36b, top: 0x2e4a8f, mid: 0xe87a4a, bot: 0xffb36b,
+    fog: 0xffb36b, top: 0x2e4a8f, mid: 0xea8a5e, bot: 0xeacb83, exposure: 0.94,
   },
   sunset: {
     hour: 18.8, sun: 0xff8f4d, sunStrength: 2.2, hemiStrength: 1.0,
-    fog: 0xe8795a, top: 0x4a5a7a, mid: 0xd9553f, bot: 0xff9a3d,
+    fog: 0xe8795a, top: 0x4a5a7a, mid: 0xdd6f52, bot: 0xe39568, exposure: 0.94,
   },
   afternoon: {
     hour: 16.0, sun: 0xffd9a0, sunStrength: 2.8, hemiStrength: 0.68,
