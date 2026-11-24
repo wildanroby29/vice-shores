@@ -90,6 +90,8 @@ function stageOnFoot(game) {
   game.setTimeOfDay('sunset');
   game.setMission(2);
   game.setHero(180, 140, Math.PI, false);
+  game.heroCar.group.position.set(176, 0, 128);
+  game.heroCar.group.rotation.y = Math.PI;
   game.camMode = 'onfoot';
   game.setWanted(2);
   game.missions.money = 12650;
@@ -131,7 +133,7 @@ function stageOnFoot(game) {
     const ped = game.peds[i];
     posePed(ped, 170 + (i % 3), 0, 120 + (i - 5) * 5, -Math.PI / 2);
   }
-  const fallenSpots = [[rx - 3, rz - 10], [rx + 5, rz - 12]];
+  const fallenSpots = [[rx - 10, rz - 4], [rx - 13, rz - 10]];
   for (let i = 0; i < 2; i++) {
     const ped = game.peds[10 + i];
     ped.fallen = true;

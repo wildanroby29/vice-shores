@@ -158,9 +158,8 @@ export function makeCar(colour, opts = {}) {
     const wingMat = paintMat;
     group.add(stdBox(1.8, 0.07, 0.48, wingMat, 0, 1.52, -2.0));
     for (const sx of [-0.7, 0.7]) group.add(stdBox(0.09, 0.3, 0.09, darkMat, sx, 1.38, -2.0));
-    const stripeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7 });
-    group.add(stdBox(0.55, 0.02, 3.9, stripeMat, 0, 0.935, 0.2));
-    group.add(stdBox(0.55, 0.02, 0.9, stripeMat, 0, 1.435, -0.1));
+    group.add(stdBox(0.55, 0.02, 3.9, paintMat, 0, 0.935, 0.2));
+    group.add(stdBox(0.55, 0.02, 0.9, paintMat, 0, 1.435, -0.1));
     group.add(stdBox(2.0, 0.09, 0.45, darkMat, 0, 0.3, 2.18));
   }
 
@@ -175,12 +174,12 @@ export function makeHeroCar() {
   car.group.position.set(150, 0, -20);
   const shadowGeo = new THREE.CircleGeometry(1, 24);
   const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false,
+    color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false,
   });
   const shadow = new THREE.Mesh(shadowGeo, shadowMat);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.02;
-  shadow.scale.set(1.15, 2.3, 1);
+  shadow.scale.set(1.0, 2.0, 1);
   shadow.renderOrder = 1;
   car.group.add(shadow);
   return car;

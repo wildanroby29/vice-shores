@@ -367,12 +367,12 @@ export function buildCity(rng) {
   sandS.position.set(0, 0.05, 210);
   sandS.receiveShadow = true;
   group.add(sandS);
-  const seaMat = new THREE.MeshStandardMaterial({ color: PAINT.sea, roughness: 0.4 });
-  const seaE = new THREE.Mesh(new THREE.PlaneGeometry(1568, 2000, 32, 32), seaMat);
+  const seaMat = new THREE.MeshStandardMaterial({ color: PAINT.sea, roughness: 0.6 });
+  const seaE = new THREE.Mesh(new THREE.PlaneGeometry(1568, 2000, 1, 1), seaMat);
   seaE.rotation.x = -Math.PI / 2;
   seaE.position.set(1016, 0.12, 0);
   group.add(seaE);
-  const seaS = new THREE.Mesh(new THREE.PlaneGeometry(2000, 1200, 32, 24), seaMat);
+  const seaS = new THREE.Mesh(new THREE.PlaneGeometry(2000, 1200, 1, 1), seaMat);
   seaS.rotation.x = -Math.PI / 2;
   seaS.position.set(0, 0.12, 900);
   group.add(seaS);
@@ -520,20 +520,13 @@ export function buildCity(rng) {
     gl.rotation.x = -Math.PI / 2;
     gl.rotation.z = rng() * Math.PI;
     gl.position.set(238 + rng() * 40, 0.12, 150 + rng() * 85);
+    gl.visible = false;
     group.add(gl);
   }
 
   const whiteMat = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false,
   });
-  for (const cz of [-120, -60, 0, 60, 120]) {
-    for (let s = 0; s < 7; s++) {
-      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 7.2), whiteMat);
-      stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(180 + (s - 3) * 1.9, 0.04, cz);
-      group.add(stripe);
-    }
-  }
   for (const cx of [-120, -60, 60, 120]) {
     for (let s = 0; s < 7; s++) {
       const stripe = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 1.1), whiteMat);

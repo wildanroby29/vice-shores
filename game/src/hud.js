@@ -22,7 +22,7 @@ const CSS = `
 #objective .next { font-size: 11.5px; opacity: 0.9; margin-top: 1px; }
 #objective .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.2); margin-top: 8px; overflow: hidden; }
 #objective .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffb36b, #ff5a3a); }
-#rank { position: absolute; top: 108px; left: 14px; padding: 6px 12px; font-size: 12px; font-weight: 700; letter-spacing: 1px; min-width: 210px; }
+#rank { position: absolute; top: 124px; left: 14px; padding: 6px 12px; font-size: 12px; font-weight: 700; letter-spacing: 1px; min-width: 210px; }
 #rank .xpbar { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.22); margin-top: 5px; overflow: hidden; }
 #rank .xpbar i { display: block; height: 100%; background: linear-gradient(90deg, #7de08a, #ffd94a); }
 #rank .xpnum { font-size: 10.5px; font-weight: 600; letter-spacing: 0.5px; opacity: 0.85; margin-top: 3px; }
@@ -97,7 +97,7 @@ const CSS = `
 #titleScreen .slot { padding: 9px 14px; margin-top: 8px; border-radius: 9px; font-size: 13px; display: flex; justify-content: space-between; background: rgba(12,16,32,0.35); border: 1px solid rgba(255,255,255,0.18); }
 #titleScreen .controls { margin-top: 22px; font-size: 12px; opacity: 0.7; }
 #titleCard { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 5vh 0 7vh; pointer-events: none; background: linear-gradient(180deg, rgba(8,10,24,0.5), rgba(8,10,24,0.18) 32%, transparent 58%); font-family: ${FONT_STACK}; }
-#titleCard .sub { font-size: 20px; font-weight: 700; letter-spacing: 4px; color: #fff; text-align: center; padding: 8px 28px; border-radius: 6px; background: linear-gradient(90deg, transparent, rgba(8,10,24,0.62) 18%, rgba(8,10,24,0.62) 82%, transparent); }
+#titleCard .sub { font-size: 20px; font-weight: 700; letter-spacing: 4px; color: #fff; text-align: center; padding: 8px 28px; border-radius: 6px; text-shadow: 0 2px 12px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.85); }
 #titleCard .press { font-size: 30px; font-weight: 700; letter-spacing: 10px; color: #ffffff; opacity: 1; text-shadow: 0 0 22px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.9), 0 2px 14px rgba(0,0,0,0.95); }
 `;
 
@@ -460,6 +460,7 @@ export function createHud() {
       stageEl.textContent = `STAGE ${st.mission.id}/${JOBS.length}`;
       nextEl.textContent = nextJob ? `NEXT: ${nextJob.name} — ${nextJob.goal}` : 'NEXT: Take the golden hour job';
       barFill.style.width = `${(st.missionDone / 8) * 100}%`;
+      rank.style.top = `${objective.offsetTop + objective.offsetHeight + 8}px`;
       const xpPct = Math.round((st.missionDone / 8) * 100);
       rank.innerHTML = `RANK: ${st.rank} · ${st.progress}<div class="xpbar"><i style="width:${xpPct}%"></i></div><div class="xpnum">${st.missionDone * 1250} / ${(st.missionDone + 1) * 1250} XP · ${xpPct}% TO ${st.rank}</div>`;
       let starHtml = '';

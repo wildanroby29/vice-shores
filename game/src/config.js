@@ -14,7 +14,7 @@ export const WORLD = {
 export const DAYTIME = {
   golden: {
     hour: 17.5, sun: 0xffb36b, sunStrength: 2.6, hemiStrength: 0.95,
-    fog: 0xf2a35e, top: 0x2e4a8f, mid: 0xe87a4a, bot: 0xffb36b,
+    fog: 0xffb36b, top: 0x2e4a8f, mid: 0xe87a4a, bot: 0xffb36b,
   },
   sunset: {
     hour: 18.8, sun: 0xff8f4d, sunStrength: 2.2, hemiStrength: 1.0,

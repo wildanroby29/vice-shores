@@ -65,6 +65,7 @@ export function createGame(canvas, opts = {}) {
   const glitter = new THREE.Mesh(new THREE.PlaneGeometry(60, 260), glitterMat);
   glitter.rotation.x = -Math.PI / 2;
   glitter.position.set(300, 0.12, 60);
+  glitter.visible = false;
   scene.add(glitter);
 
   const markerMat = new THREE.MeshStandardMaterial({
