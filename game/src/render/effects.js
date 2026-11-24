@@ -1,195 +1,84 @@
-// Vice Shores — short-lived combat and driving effects.
-//
-// Smoke puffs, flames, muzzle flashes, tracers and sparks. Everything is a
-// sprite or a thin box that ages out on its own: each effect carries its
-// age and lifetime, update() ticks them, and anything past its life is
-// removed from the scene and disposed. The list is capped so a long
-// firefight can never pile up hundreds of live sprites. Muzzle flashes are
-// deliberately small (a third of a metre) so they read as a gunshot, not
-// an explosion; tracers are thin additive boxes that fade in a blink.
-
-function makeRadial(inner, outer) {
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 64;
-  const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
-  grad.addColorStop(0, inner);
-  grad.addColorStop(1, outer);
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+// Effects: muzzle flash, tracers, sparks, smoke, halos, heli beam, rotor disc.
+const THREE = window.THREE;
+function glowTex(inner, outer) {
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+  const g = cv.getContext('2d');
+  const rg = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  rg.addColorStop(0, inner); rg.addColorStop(1, outer);
+  g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
 }
-
-export function createEffects(scene) {
-  const smokeTex = makeRadial('rgba(255,255,255,0.9)', 'rgba(255,255,255,0)');
-  const fireTex = makeRadial('rgba(255,220,120,1)', 'rgba(255,80,0,0)');
-  const live = [];
-
-  function add(item) {
-    live.push(item);
-    if (live.length > 220) {
-      const old = live.shift();
-      if (old.mesh) scene.remove(old.mesh);
+const flashTex = glowTex('rgba(255,240,180,1)', 'rgba(255,140,40,0)');
+const smokeTex = glowTex('rgba(200,200,200,0.55)', 'rgba(120,120,120,0)');
+const haloTex = glowTex('rgba(255,230,160,0.9)', 'rgba(255,180,80,0)');
+export class Effects {
+  constructor(scene) {
+    this.scene = scene; this.items = [];
+  }
+  add(sprite, life) { this.scene.add(sprite); this.items.push({ s: sprite, life, max: life }); }
+  flash(pos) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sp.position.copy(pos); sp.scale.set(2.8, 2.8, 1);
+    this.add(sp, 0.22);
+  }
+  tracer(a, b) {
+    const dir = new THREE.Vector3().subVectors(b, a);
+    const len = dir.length();
+    const geo = new THREE.CylinderGeometry(0.08, 0.08, len, 5, 1, true);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.position.copy(a).addScaledVector(dir, 0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    this.add(m, 0.25);
+  }
+  sparks(pos) {
+    for (let i = 0; i < 7; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, depthWrite: false }));
+      sp.position.set(pos.x + (Math.random() - 0.5), pos.y + Math.random() * 0.5, pos.z + (Math.random() - 0.5));
+      sp.scale.set(0.5, 0.5, 1);
+      sp.userData.v = new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6);
+      this.add(sp, 0.35);
     }
   }
-
-  // A drifting smoke puff that grows and thins as it rises. Colour and
-  // size are the caller's: tyre smoke is pale grey, gun smoke is warm.
-  function smoke(x, y, z, opts = {}) {
-    const size = opts.size ?? 1.5;
-    const life = opts.life ?? 0.9;
-    const colour = opts.color ?? 0xcfc8bd;
-    const mat = new THREE.SpriteMaterial({
-      map: smokeTex, color: colour, opacity: 0.25,
-      transparent: true, depthWrite: false,
-    });
-    const spr = new THREE.Sprite(mat);
-    spr.position.set(x, y, z);
-    spr.scale.set(size, size, 1);
-    scene.add(spr);
-    add({
-      mesh: spr, age: 0, life,
-      tick(dt) {
-        this.age += dt;
-        spr.position.y += (1.2 + Math.random() * 0.8) * dt;
-        const k = 1 + (this.age / life) * 0.8;
-        spr.scale.set(size * k, size * k, 1);
-        mat.opacity = 0.25 * (1 - this.age / life);
-      },
-    });
+  smoke(pos, big) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, opacity: 0.6, depthWrite: false }));
+    sp.position.copy(pos); sp.position.y += 0.6;
+    const s = big ? 3.2 : 1.4; sp.scale.set(s, s, 1);
+    sp.userData.v = new THREE.Vector3(0, 1.2, 0);
+    this.add(sp, 1.1);
   }
-
-  // Faint ground haze: a wide, flat, barely-there warm disc that sits
-  // under the hero car in the chase shot so the car reads as grounded
-  // in dusty golden-hour air instead of floating on clean asphalt.
-  function haze(x, z, opts = {}) {
-    const size = opts.size ?? 7;
-    const opacity = opts.opacity ?? 0.10;
-    const life = opts.life ?? 3;
-    const mat = new THREE.MeshBasicMaterial({
-      map: smokeTex, color: 0xe8dcc8, transparent: true, opacity,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 0.6), mat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x, 0.15, z);
-    mesh.renderOrder = 0;
-    scene.add(mesh);
-    add({
-      mesh, age: 0, life,
-      tick(dt) {
-        this.age += dt;
-        mat.opacity = opacity * (this.age > life - 0.5
-          ? Math.max(0, (life - this.age) / 0.5) : 1);
-      },
-    });
+  halo(pos, size, color) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 }));
+    sp.position.copy(pos); sp.scale.set(size, size, 1);
+    this.scene.add(sp);
+    return sp;
   }
-
-  // A short additive flame, used when a police car takes a hit.
-  function flame(x, y, z, size) {
-    const mat = new THREE.SpriteMaterial({
-      map: fireTex, color: 0xffc46b, opacity: 0.9,
-      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const spr = new THREE.Sprite(mat);
-    spr.position.set(x, y, z);
-    spr.scale.set(size, size * 1.6, 1);
-    scene.add(spr);
-    add({
-      mesh: spr, age: 0, life: 0.5,
-      tick(dt) {
-        this.age += dt;
-        mat.opacity = 0.9 * (1 - this.age / 0.5);
-      },
-    });
+  beam(from, to) {
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const len = dir.length();
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(3.2, len, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    cone.position.copy(from).addScaledVector(dir, 0.5);
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize().negate());
+    this.scene.add(cone);
+    const ell = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24), new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ell.rotation.x = -Math.PI / 2; ell.position.set(to.x, 0.12, to.z);
+    this.scene.add(ell);
+    return { cone, ell };
   }
-
-  // Small muzzle flash at the barrel: a third of a metre across, gone in
-  // under a tenth of a second. Small is the point — it marks the shot
-  // without hiding the shooter.
-  function muzzle(x, y, z) {
-    const mat = new THREE.SpriteMaterial({
-      map: fireTex, color: 0xffe9a8, opacity: 0.85,
-      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const spr = new THREE.Sprite(mat);
-    spr.position.set(x, y, z);
-    spr.scale.set(0.35, 0.35, 1);
-    scene.add(spr);
-    add({
-      mesh: spr, age: 0, life: 0.08,
-      tick(dt) {
-        this.age += dt;
-        mat.opacity = 0.85 * (1 - this.age / 0.08);
-      },
-    });
+  rotorDisc(pos) {
+    const d = new THREE.Mesh(new THREE.CircleGeometry(4.4, 24), new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+    d.rotation.x = -Math.PI / 2; d.position.copy(pos);
+    this.scene.add(d);
+    return d;
   }
-
-  // A thin glowing line from muzzle to target, fading fast.
-  function tracer(from, to) {
-    const a = new THREE.Vector3(...from);
-    const b = new THREE.Vector3(...to);
-    const len = a.distanceTo(b);
-    const geo = new THREE.BoxGeometry(0.03, 0.03, len);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffe9a0, transparent: true, opacity: 0.35,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(a).lerp(b, 0.5);
-    mesh.lookAt(b);
-    scene.add(mesh);
-    add({
-      mesh, age: 0, life: 0.15,
-      tick(dt) {
-        this.age += dt;
-        mat.opacity = 0.35 * (1 - this.age / 0.15);
-      },
-    });
-  }
-
-  // A burst of bright sparks that fly out and fade.
-  function sparks(x, y, z, n) {
-    for (let i = 0; i < n; i++) {
-      const mat = new THREE.SpriteMaterial({
-        map: fireTex, color: 0xffc46b, opacity: 1,
-        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-      });
-      const spr = new THREE.Sprite(mat);
-      spr.position.set(x, y, z);
-      spr.scale.set(0.35, 0.35, 1);
-      scene.add(spr);
-      const vx = (Math.random() - 0.5) * 6;
-      const vy = Math.random() * 4 + 1;
-      const vz = (Math.random() - 0.5) * 6;
-      add({
-        mesh: spr, age: 0, life: 0.4,
-        tick(dt) {
-          this.age += dt;
-          spr.position.x += vx * dt;
-          spr.position.y += vy * dt;
-          spr.position.z += vz * dt;
-          mat.opacity = 1 - this.age / 0.4;
-        },
-      });
+  update(dt) {
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      it.life -= dt;
+      const f = Math.max(0, it.life / it.max);
+      if (it.s.userData.v) it.s.position.addScaledVector(it.s.userData.v, dt);
+      if (it.s.material) it.s.material.opacity = f * (it.s.userData.baseOp ?? 0.9);
+      if (it.s.scale) { const s = it.s.scale.x * (1 + dt * 0.6); it.s.scale.set(s, s, 1); }
+      if (it.life <= 0) { this.scene.remove(it.s); this.items.splice(i, 1); }
     }
   }
-
-  // Tick every live effect; drop the finished ones.
-  function update(dt) {
-    for (let i = live.length - 1; i >= 0; i--) {
-      const item = live[i];
-      item.tick(dt);
-      if (item.age >= item.life) {
-        scene.remove(item.mesh);
-        if (item.mesh.material) item.mesh.material.dispose();
-        live.splice(i, 1);
-      }
-    }
-  }
-
-  return { smoke, flame, muzzle, tracer, sparks, haze, update };
 }

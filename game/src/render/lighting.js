@@ -1,93 +1,45 @@
-// Vice Shores — lights, shadows and tone mapping.
-//
-// One warm sun with soft shadows, a hemisphere fill so shadowed faces stay
-// readable, and a cool fill light from the opposite side so the city never
-// goes muddy. ACES filmic tone mapping at a slightly lifted exposure keeps
-// golden hour bright and readable — the streets are never near-black.
-// blobShadow is the cheap ground haze disc used under cars: a soft black
-// circle whose opacity is set by the caller (the hero car's is kept very
-// faint so it reads as contact shadow, not a grey puddle).
-
-import { DAYTIME } from '../config.js';
-
-// A soft elliptical contact shadow. The caller picks the opacity: hero
-// cars use a faint one (0.07) so the asphalt still reads through it.
-// Module-level so vehicles can use it directly without a lighting instance.
-export function blobShadow(scaleX, scaleZ, opacity) {
-  const geo = new THREE.CircleGeometry(1, 24);
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0x000000, transparent: true, opacity,
-    depthWrite: false,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.y = 0.02;
-  mesh.scale.set(scaleX, scaleZ, 1);
-  mesh.renderOrder = 1;
-  return mesh;
-}
-
-export function createLighting(scene, renderer) {
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Lighting: warm low sun with shadows, hemisphere fill, cool fill and PMREM environment.
+const THREE = window.THREE;
+export function setupLighting(scene, renderer) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-
-  const sun = new THREE.DirectionalLight(DAYTIME.golden.sun, DAYTIME.golden.sunStrength);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const sun = new THREE.DirectionalLight(0xffd9a0, 2.7);
+  sun.position.set(130, 95, 70);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 260;
-  sun.shadow.camera.left = -45;
-  sun.shadow.camera.right = 45;
-  sun.shadow.camera.top = 45;
-  sun.shadow.camera.bottom = -45;
+  sun.shadow.camera.left = -190; sun.shadow.camera.right = 190;
+  sun.shadow.camera.top = 190; sun.shadow.camera.bottom = -190;
+  sun.shadow.camera.near = 10; sun.shadow.camera.far = 520;
   sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.02;
   scene.add(sun);
-  scene.add(sun.target);
-
-  const hemi = new THREE.HemisphereLight(0x9a9da2, 0x8a8a8a, 0.5);
+  const hemi = new THREE.HemisphereLight(0xffe2b8, 0x51608a, 1.25);
   scene.add(hemi);
-
-  const fill = new THREE.DirectionalLight(0xb0bccd, 0.35);
-  fill.position.set(-60, 40, -80);
+  const fill = new THREE.DirectionalLight(0x9db8ff, 0.85);
+  fill.position.set(-90, 70, -60);
   scene.add(fill);
-
-  // Point the sun from the preset's hour: low in the evening, higher in
-  // the afternoon, barely above the horizon at night. Returns the sun
-  // direction (for the sky shader) and whether it is night.
-  function setTime(presetKey, target) {
-    const preset = DAYTIME[presetKey];
-    const isNight = presetKey === 'night';
-    const elev = isNight ? 0.05 : 0.12;
-    const azim = ((preset.hour - 12) / 12) * Math.PI + 0.6;
-    const dir = new THREE.Vector3(
-      Math.cos(elev) * Math.sin(azim),
-      Math.sin(elev),
-      Math.cos(elev) * Math.cos(azim),
-    );
-    sun.position.copy(target).addScaledVector(dir, 120);
-    sun.target.position.copy(target);
-    sun.color.setHex(preset.sun);
-    sun.intensity = preset.sunStrength;
-    hemi.intensity = preset.hemiStrength;
-    fill.intensity = isNight ? 1.0 : 0.35;
-    renderer.toneMappingExposure = 1.15;
-    return { dir, isNight };
-  }
-
-  // Flat mode for the dossier's clean reference renders: no tone mapping,
-  // no shadows, a plain grey backdrop.
-  function setFlat() {
-    renderer.toneMapping = THREE.NoToneMapping;
-    renderer.shadowMap.enabled = false;
-    scene.background = new THREE.Color(0x9a9a9a);
-    scene.environment = null;
-    scene.fog = null;
-  }
-
-  return { sun, hemi, fill, setTime, setFlat, blobShadow };
+  const amb = new THREE.AmbientLight(0x93a5c4, 0.5);
+  scene.add(amb);
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 32;
+  const g = cv.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 32);
+  grad.addColorStop(0, '#3a2a6a'); grad.addColorStop(0.45, '#ff7a3d');
+  grad.addColorStop(0.62, '#ffd9a0'); grad.addColorStop(1, '#5a4a6a');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 32);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromEquirectangular(tex).texture;
+  return { sun, hemi, fill, amb };
+}
+export function setNight(lights, night) {
+  const f = night ? 0.35 : 1;
+  lights.sun.intensity = 2.7 * f;
+  lights.hemi.intensity = night ? 0.5 : 1.25;
+  lights.fill.intensity = night ? 0.35 : 0.85;
+  lights.amb.intensity = night ? 0.3 : 0.5;
+  lights.sun.color.setHex(night ? 0x8fa8ff : 0xffd9a0);
 }

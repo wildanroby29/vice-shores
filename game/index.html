@@ -1,22 +1,81 @@
+<!-- Vice Shores — open-world crime game (three.js, offline, keyboard + mouse). -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0a0e1e">
-<meta name="description" content="Vice Shores — an open-world crime game in the spirit of GTA 6. Drive the orange GT Sunline through a sun-soaked coastal city, run eight story jobs for Marla, and outrun the police.">
-<title>Vice Shores — an open-world crime game</title>
+<title>Vice Shores</title>
 <style>
-  html, body { margin: 0; padding: 0; background: #0a0e1e; overflow: hidden; height: 100%; }
-  #game { display: block; width: 100vw; height: 100vh; }
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0b1020;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;filter:contrast(1.07) saturate(1.14)}
+#vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.38) 100%);z-index:5}
+.glass{background:rgba(8,12,24,.58);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);border:1px solid rgba(255,255,255,.20);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;font-size:14px}
+.card{position:absolute;padding:10px 14px;line-height:1.35}
+#mission{top:14px;left:14px;max-width:340px}
+#mission b{color:#ffd166;font-size:15px}
+#mission .next{color:#9fd8ff}
+#rank{top:14px;left:14px;top:118px;max-width:340px;padding:8px 14px}
+#rank .bar{height:7px;border-radius:4px;background:rgba(255,255,255,.22);margin-top:5px;overflow:hidden}
+#xpFill{height:100%;width:0%;background:linear-gradient(90deg,#ffb347,#ff7b3d);border-radius:4px}
+#stars{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:26px;letter-spacing:4px;color:#ffd166;text-shadow:0 0 10px rgba(255,190,60,.8)}
+#stars .off{color:rgba(255,255,255,.35);text-shadow:none}
+#money{top:14px;right:14px;text-align:right;font-weight:700}
+#money .sub{font-weight:500;color:#cfe6ff;font-size:12px}
+#dispatch{top:86px;right:14px;max-width:330px;font-size:13px}
+#dispatch .unit{white-space:nowrap}
+#dispatch .line{color:#ffd166;font-style:italic;margin-top:4px}
+#miniwrap{position:absolute;right:14px;bottom:14px;text-align:right}
+#minimap{border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(8,12,24,.6);box-shadow:0 6px 24px rgba(0,0,0,.4)}
+#speed{text-align:right;margin-top:6px;font-weight:700}
+#speed .sub{font-weight:500;color:#cfe6ff;font-size:12px}
+#weapons{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
+.wslot{padding:7px 12px;font-size:13px;color:#dfe9ff}
+.wslot.on{border-color:#ffd166;color:#fff;box-shadow:0 0 0 1px #ffd166 inset}
+.wslot b{color:#ffd166}
+#abilities{position:absolute;bottom:14px;left:14px;display:flex;gap:8px}
+.acard{padding:7px 10px;font-size:12px;color:#dfe9ff}
+.acard .k{display:inline-block;background:#ffd166;color:#111;border-radius:4px;padding:0 5px;font-weight:800;margin-right:5px}
+#subtitle{position:absolute;bottom:78px;left:50%;transform:translateX(-50%);max-width:640px;text-align:center;padding:8px 16px;font-size:15px}
+#subtitle .spk{color:#ffd166;font-weight:800;margin-right:6px}
+#prompt{position:absolute;bottom:140px;left:50%;transform:translateX(-50%);padding:8px 14px;font-size:14px}
+#prompt .k{display:inline-block;background:#ffd166;color:#111;border-radius:4px;padding:0 6px;font-weight:800;margin-right:6px}
+#title{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center}
+#sun{position:absolute;top:calc(50% - 110px);left:calc(50% - 57px);width:114px;height:114px;border-radius:50%;background:radial-gradient(circle at 50% 42%,#fff3b0 0%,#ffb347 34%,#ff6a3d 62%,#c22e6e 100%);opacity:.92;box-shadow:0 0 30px rgba(255,140,60,.75)}
+#sun::after{content:"";position:absolute;inset:0;border-radius:50%;background:repeating-linear-gradient(180deg,transparent 0 10px,rgba(20,8,20,.5) 10px 14px);-webkit-mask:linear-gradient(180deg,transparent 78%,#000 78%,#000 92%,transparent 92%);mask:linear-gradient(180deg,transparent 78%,#000 78%,#000 92%,transparent 92%)}
+#titleLogo{position:relative;font-size:84px;font-weight:900;letter-spacing:6px;line-height:1;margin:0;background:linear-gradient(180deg,#ffffff 0%,#ffffff 55%,#ffe9a8 78%,#ffb347 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(255,150,60,.7))}
+#titleSub{position:relative;margin-top:14px;font-size:21px;font-weight:600;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7)}
+#pressStart{position:relative;margin-top:44px;font-size:20px;font-weight:800;letter-spacing:4px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.9),0 0 18px rgba(0,0,0,.6)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+#progress{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(24,34,56,.5);backdrop-filter:blur(3px)}
+#progBox{display:flex;gap:16px;width:1180px;max-width:96vw;max-height:92vh}
+#progMap{border-radius:14px;background:#2a3a55}
+#progSide{flex:0 0 340px;padding:16px 18px;overflow:auto;font-size:14px;line-height:1.5;background:rgba(28,40,64,.88)}
+#progSide h2{margin:0 0 4px;font-size:20px}
+#progSide h3{margin:14px 0 6px;font-size:14px;color:#ffd166}
+#progSide .slot{border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:8px 10px;margin-top:6px}
+#help{position:fixed;left:14px;bottom:64px;z-index:10;font-size:12px;color:rgba(255,255,255,.75);text-shadow:0 1px 4px rgba(0,0,0,.8)}
 </style>
+<script src="./vendor/three.min.js"></script>
 </head>
 <body>
-<canvas id="game"></canvas>
-<noscript><p style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#f2f4f8;font:16px system-ui,sans-serif;background:#0a0e1e">Vice Shores needs JavaScript to play.</p></noscript>
-<p id="status" role="status" aria-live="polite"></p>
-<script src="./vendor/three.min.js"></script>
+<canvas id="c"></canvas>
+<div id="vig"></div>
+<div id="hud">
+  <div id="mission" class="glass card"><b id="missionTitle">VICE SHORES</b><div id="missionObj">Press ENTER to start a new game.</div><div class="next" id="missionNext"></div></div>
+  <div id="rank" class="glass card"><span id="rankName">ROOKIE</span> · <span id="rankXpText">0 / 100 XP</span><div class="bar"><div id="xpFill"></div></div></div>
+  <div id="stars"></div>
+  <div id="money" class="glass card"><span id="moneyVal">$0</span><div class="sub"><span id="clockVal">17:30</span> · <span id="radioVal">SHORE FM</span></div></div>
+  <div id="dispatch" class="glass card"><div id="dispatchUnits"></div><div class="line" id="dispatchLine"></div></div>
+  <div id="miniwrap"><canvas id="minimap" width="168" height="168"></canvas><div id="speed"><span id="speedNum">0</span><div class="sub" id="speedCar">ON FOOT</div></div></div>
+  <div id="weapons"></div>
+  <div id="abilities"></div>
+  <div id="subtitle" class="glass" style="display:none"><span class="spk" id="subSpeaker"></span><span id="subText"></span></div>
+  <div id="prompt" class="glass" style="display:none"></div>
+</div>
+<div id="help">WASD move · E enter/exit car · 1-4 weapons · Click shoot · Q/F/C abilities · P progress · M mute</div>
+<div id="title"><div id="sun"></div><h1 id="titleLogo">VICE SHORES</h1><div id="titleSub">A sun-soaked city of your own</div><div id="pressStart">PRESS START</div></div>
+<div id="progress"><div id="progBox"><canvas id="progMap" width="800" height="640"></canvas><div id="progSide" class="glass"></div></div></div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

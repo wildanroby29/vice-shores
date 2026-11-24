@@ -1,146 +1,33 @@
-import { JOBS, RANKS, CREW, STATIONS } from './config.js';
-
-export const WEAPONS = [
-  { name: 'Fists', ammo: Infinity, damage: 1 },
-  { name: 'Pistol', ammo: 48, damage: 3 },
-  { name: 'SMG', ammo: 120, damage: 2 },
-  { name: 'Shotgun', ammo: 24, damage: 5 },
+// Missions: 8 staged jobs with dialogue, objectives, payouts and NEXT chaining.
+export const MISSIONS = [
+  { id: 1, title: 'First Wheels', type: 'delivery', payout: 800, place: 'Coral Row', obj: 'Steal the orange GT on Coral Row and bring it to North Garage.', next: 'Meet Deacon at the garage', lines: [['ROOK', 'One car. One garage. That is how every legend in this city starts.'], ['DEACON', 'The GT is parked on Coral Row. Take it. Do not scratch it.']] },
+  { id: 2, title: 'Ocean Drive Getaway', type: 'getaway', payout: 1200, place: 'Ocean Drive', obj: 'Lose the 4-star heat on Ocean Drive.', next: 'Deliver the package to the Marina', lines: [['DEACON', 'Four stars, Rook. The whole city is looking for you.'], ['ROOK', 'Then let them look. I know these streets better than they do.']] },
+  { id: 3, title: 'Plaza Nights', type: 'shootout', payout: 1500, place: 'Plaza', obj: 'Deal with the two armed dealers in the market.', next: 'Meet Deacon at the stall', lines: [['DEACON', 'Two dealers, both armed, both in the market.'], ['ROOK', 'I see them. This ends tonight.']] },
+  { id: 4, title: 'The Marina Drop', type: 'delivery', payout: 1800, place: 'Marina', obj: 'Deliver the package to the boat at the Marina.', next: 'Pick up the next job from Deacon', lines: [['ROOK', 'Package is in the trunk. The boat is waiting.'], ['DEACON', 'No stops, no questions. The Marina, Rook.']] },
+  { id: 5, title: 'Bank Job', type: 'ram', payout: 2500, place: 'Bank District', obj: 'Ram the target van in the Bank District until it stops.', next: 'Grab the cash and vanish', lines: [['DEACON', 'The van carries the payroll. Ram it, take it, vanish.'], ['ROOK', 'Consider it done.']] },
+  { id: 6, title: 'Pier Lights', type: 'shootout', payout: 3000, place: 'Pier', obj: 'Clear the rival crew off the Pier boardwalk.', next: 'Hold the Pier for the crew', lines: [['ROOK', 'They took our pier. I am taking it back.'], ['DEACON', 'Watch the rooftops. They always post one up high.']] },
+  { id: 7, title: 'Coral Row Sweep', type: 'shootout', payout: 3500, place: 'Coral Row', obj: 'Clear the rival crew from Coral Row.', next: 'One last job: the Kingpin run', lines: [['DEACON', 'Coral Row is ours once you sweep it.'], ['ROOK', 'Then it is already ours.']] },
+  { id: 8, title: 'Kingpin', type: 'getaway', payout: 5000, place: 'Vice Shores', obj: 'Outrun the 5-star heat and reach the Pier to become Kingpin.', next: 'You own this city now', lines: [['DEACON', 'Five stars, Rook. Survive this and the city is yours.'], ['ROOK', 'Then let them come. All of them.']] },
 ];
-
-const COLLECTIBLES = [
-  { name: 'Golden Cassette', hint: 'Coral Row rooftop' },
-  { name: 'Sunset Postcard', hint: 'Pier end bench' },
-  { name: 'Lucky Coin', hint: 'Bank District fountain' },
-  { name: 'Marla’s Lighter', hint: 'North Garage bay 3' },
-  { name: 'Tide Chart', hint: 'Marina office' },
-  { name: 'Palm Keychain', hint: 'Plaza market stall' },
+export const RANKS = [
+  { name: 'ROOKIE', xp: 0 }, { name: 'HUSTLER', xp: 300 }, { name: 'RUNNER', xp: 700 },
+  { name: 'ENFORCER', xp: 1200 }, { name: 'BOSS', xp: 2000 }, { name: 'KINGPIN', xp: 3000 },
 ];
-
-export function createMissions() {
-  let index = 0;
-  let done = 0;
-  let cash = 2650;
-  let weaponSlot = 0;
-  let stationSlot = 0;
-  const ammoLeft = WEAPONS.map((w) => w.ammo);
-
-  function rankName() {
-    let name = RANKS[0].name;
-    for (const r of RANKS) if (done >= r.at) name = r.name;
-    return name;
+export class MissionLog {
+  constructor() { this.index = 0; this.done = 0; this.money = 0; this.xp = 0; this.ratings = []; }
+  current() { return MISSIONS[this.index]; }
+  stageText() { return `STAGE ${this.index + 1}/8 — ${this.current().title}`; }
+  complete(rating) {
+    const m = this.current();
+    this.money += m.payout; this.xp += 120; this.done += 1;
+    this.ratings.push(rating || 'S');
+    if (this.index < MISSIONS.length - 1) this.index += 1;
+    return m;
   }
-
-  // The next rank on the ladder (or null at TIDE BOSS): the HUD's XP
-  // bar reads "0% TO <next>" from this, so the goal is always visible.
-  function nextRank() {
-    for (const r of RANKS) if (done < r.at) return { name: r.name, at: r.at };
-    return null;
+  rank() {
+    let r = RANKS[0];
+    for (const k of RANKS) if (this.xp >= k.xp) r = k;
+    const next = RANKS[RANKS.findIndex(k => k === r) + 1];
+    return { name: r.name, cur: this.xp, need: next ? next.xp : this.xp, next: next ? next.name : null };
   }
-
-  return {
-    get current() {
-      return JOBS[index];
-    },
-    get index() {
-      return index;
-    },
-    get completed() {
-      return done;
-    },
-    get money() {
-      return cash;
-    },
-    set money(v) {
-      cash = v;
-    },
-    get rank() {
-      return rankName();
-    },
-    get nextRank() {
-      return nextRank();
-    },
-    get progress() {
-      return `${done}/${JOBS.length}`;
-    },
-    get weapon() {
-      return { ...WEAPONS[weaponSlot], ammo: ammoLeft[weaponSlot] };
-    },
-    get weapons() {
-      return WEAPONS.map((w, i) => ({
-        ...w, ammo: ammoLeft[i], active: i === weaponSlot,
-      }));
-    },
-    get radio() {
-      return STATIONS[stationSlot];
-    },
-    progressData() {
-      const found = Math.min(COLLECTIBLES.length, done + 1);
-      const ratings = JOBS.map((j, i) => ({
-        name: j.name,
-        rating: i < done ? ['S', 'A', 'A', 'S', 'B', 'A', 'S', 'A'][i] : '—',
-      }));
-      const xp = done * 1250;
-      return {
-        collectibles: {
-          found,
-          total: COLLECTIBLES.length,
-          items: COLLECTIBLES.map((c, i) => ({ ...c, found: i < found })),
-        },
-        missions: ratings,
-        career: {
-          missionsDone: done,
-          missionsTotal: JOBS.length,
-          moneyEarned: 2650 + JOBS.slice(0, done).reduce((s, j) => s + j.reward, 0),
-          carsStolen: Math.min(3, done),
-          escapes: Math.min(2, done),
-          bestStars: Math.min(5, 2 + done),
-        },
-        rankXp: xp,
-        rankNextXp: (done + 1) * 1250,
-      };
-    },
-    get crew() {
-      return CREW;
-    },
-    setMission(i) {
-      index = Math.max(0, Math.min(JOBS.length - 1, i));
-    },
-    complete() {
-      const job = JOBS[index];
-      cash += job.reward;
-      done += 1;
-      const finishedAll = done >= JOBS.length;
-      if (!finishedAll) index = Math.min(index + 1, JOBS.length - 1);
-      return { job, finishedAll };
-    },
-    spend(amount) {
-      if (cash < amount) return false;
-      cash -= amount;
-      return true;
-    },
-    cycleRadio() {
-      stationSlot = (stationSlot + 1) % STATIONS.length;
-      return STATIONS[stationSlot];
-    },
-    cycleWeapon() {
-      weaponSlot = (weaponSlot + 1) % WEAPONS.length;
-      return { ...WEAPONS[weaponSlot], ammo: ammoLeft[weaponSlot] };
-    },
-    useAmmo() {
-      const w = WEAPONS[weaponSlot];
-      if (!Number.isFinite(w.ammo)) return true;
-      if (ammoLeft[weaponSlot] <= 0) return false;
-      ammoLeft[weaponSlot] -= 1;
-      return true;
-    },
-    load(save) {
-      if (!save) return;
-      if (typeof save.money === 'number') cash = save.money;
-      if (typeof save.mission === 'number') index = save.mission;
-      if (typeof save.completed === 'number') done = save.completed;
-    },
-    snapshot() {
-      return { money: cash, mission: index, completed: done, rank: rankName() };
-    },
-  };
 }

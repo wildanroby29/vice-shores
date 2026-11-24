@@ -1,75 +1,16 @@
 # Vice Shores
 
-[![gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
 [![rank](https://make.fun/badge/gta6-01/wildanroby29/vice-shores/rank.svg)](https://make.fun/bounty/gta6-01)
 [![reward](https://make.fun/badge/gta6-01/wildanroby29/vice-shores/reward.svg)](https://make.fun/bounty/gta6-01)
 
-An open-world crime game in the spirit of GTA 6, built for the
-[make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01). You are Rook, a
-driver working eight story jobs for the fixer Marla in Vice Shores — an
-invented sun-soaked coastal city with a boulevard, a beach, a marina and a
-pier. Drive the orange GT Sunline, steal cars, run from the police, fight on
-foot, and climb from NOBODY to TIDE BOSS.
+An open-world crime game in the spirit of GTA 6, built for the [make.fun GTA 6 bounty](https://make.fun/bounty/gta6-01). Explore Vice Shores — a sun-soaked coastal city — on foot and by car: steal cars, outrun the police, run 8 staged jobs, fight, and climb from Rookie to Kingpin.
 
-## Play it
+Play it: serve `game/` with any static server (`node serve.ts`, then open http://localhost:8080) and play in desktop Chrome. Keyboard + mouse. No network requests; three.js is vendored under `game/vendor/`.
 
-Serve the game folder with any static server (for example `node serve.ts`)
-and open `http://localhost:8080` in desktop Chrome. No build step, no
-network: every script, model and sound is a file under `game/`, and the only
-library is three.js, vendored under `game/vendor/`.
+- 6 districts, traffic, 25+ pedestrians, 5-star wanted with named police units and a helicopter
+- 8 staged missions with dialogue, payouts and chaining; 4 weapons; crew abilities
+- Garage, minimap, rank + XP, 3 save slots, pause/progress screen with a district map
+- Day/night cycle, rain, radio stations
 
-## What is in the city
-
-- A full 3D city: 60+ buildings in seven palettes, palms, street lamps,
-  benches, a central plaza with a fountain, a beach and a pier with boats.
-- Driving and walking: third-person chase camera, on-foot over-the-shoulder
-  camera, carjacking, sprinting, shooting.
-- A 5-star wanted system: police cars with flashing light bars, officers on
-  foot, roadblocks, and a searchlight helicopter that hovers over you.
-- Eight story missions with dialogue from Marla, a respect ladder, a crew
-  (Marla, Dex, Lena), three radio stations, three weapons, and a garage shop
-  (Vice Customs) with six upgrades.
-- A HUD with a minimap and a full map, mission objective, wanted stars,
-  dispatch list, money and clock, health and armour, and save slots — plus
-  a rank card with an XP bar to the next rank, four weapon slots with ammo,
-  three crew ability cards with key chips, and a dialogue subtitle with a
-  speaker chip.
-- A title screen that slowly orbits the city at golden hour, and a night
-  market with striped stalls, paper lanterns and string lights where the
-  on-foot firefight happens.
-
-## Controls
-
-| Key | Action |
-| --- | --- |
-| W A S D / arrows | Drive or walk |
-| E | Enter / steal a car, exit the car |
-| Space | Shoot / confirm |
-| Shift | Sprint on foot, nitro in the car |
-| C | Camera |
-| M | Full map |
-| G | Vice Customs (upgrades) |
-| R | Radio station |
-| Q | Switch weapon |
-| 1 / 2 / 3 | Crew ability: Swap Plates, Quick Fix, Eyes Out |
-| P / Esc | Pause |
-
-## Screenshots
-
-The three screenshots in `screenshots/` are real renders of the game itself:
-the title card over the city at golden hour (slow aerial orbit), a four-star
-police chase on the boulevard, and a firefight on foot in the night market.
-
-Round 15 (Nov 24) re-verified the three shots against the spec: the rank XP
-bar now names the next rank, the on-foot prompt clears the ability cards, the
-helicopter holds further out so its searchlight beam reads across the chase
-frame, faint haze grounds the hero car, and keyboard E/Space now reach the
-game (they were swallowed by a double take of the input queue).
-
-## Tech
-
-- three.js (vendored, `game/vendor/three.min.js`), plain ES modules.
-- `main.ts` hands the entry in: it copies `game/` and `screenshots/` to the
-  output directory and writes `dossier.json` with the vendored make.fun
-  library (`vendor/makefun-game.ts`).
-- `serve.ts` is a tiny static server for local play on port 8080.
+MIT License — Copyright (c) 2026 Wildan Robiansyah.

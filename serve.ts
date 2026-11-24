@@ -1,20 +1,15 @@
-// A tiny static server for playing Vice Shores locally.
-//
-// Serves the game/ folder on port 8080 (or --port N) from this directory,
-// nothing else: any path that climbs out of game/ is refused, missing files
-// are 404, and nothing is cached, so a rebuild shows up on the next reload.
-// Node standard library only — no dependencies, no build step.
-
+// Vice Shores dev server: serves game/ on http://localhost:8080 (node serve.ts [--port N]).
+import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { join, extname, resolve, sep } from 'node:path';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const root = resolve(join(here, 'game'));
-const port = Number(process.argv.find((a) => a.startsWith('--port='))?.split('=')[1] ?? 8080);
+const root = resolve(fileURLToPath(new URL('./game', import.meta.url)));
+const flag = process.argv.indexOf('--port');
+const want = flag === -1 ? 8080 : Number(process.argv[flag + 1]);
+const port = Number.isInteger(want) && want > 0 && want < 65536 ? want : 8080;
 
-const MIME = {
+const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
@@ -23,65 +18,20 @@ const MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.glb': 'model/gltf-binary',
-  '.gltf': 'model/gltf+json',
-  '.bin': 'application/octet-stream',
-  '.wasm': 'application/wasm',
   '.wav': 'audio/wav',
   '.mp3': 'audio/mpeg',
-  '.ogg': 'audio/ogg',
-  '.txt': 'text/plain; charset=utf-8',
 };
 
-const server = createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    let path = decodeURIComponent(url.pathname);
-    if (path === '/') path = '/index.html';
-    const file = resolve(join(root, path));
-    if (!file.startsWith(root + sep)) {
-      res.writeHead(403, { 'Content-Type': 'text/plain' });
-      res.end('Forbidden: outside game/');
-      return;
-    }
-    const body = await readFile(file);
-    const headers = {
-      'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
-      'Cache-Control': 'no-store',
-      'Content-Length': String(body.length),
-    };
-    // HEAD asks for the headers only (used by the screenshot tool to
-    // probe a file without downloading it); the body is sent for GET.
-    if (req.method === 'HEAD') {
-      res.writeHead(200, headers);
-      res.end();
-      return;
-    }
-    res.writeHead(200, headers);
-    res.end(body);
-  } catch (e) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not found');
-  }
-});
-
-server.listen(port, '127.0.0.1', () => {
-  console.log(`game/ is on http://localhost:${port}`);
-});
-
-// A busy port fails fast with a readable message instead of a bare
-// EADDRINUSE stack: the screenshot runner needs this server up, and a
-// stale server on :8080 is the usual reason it is not.
-server.on('error', (err) => {
-  if (err && err.code === 'EADDRINUSE') {
-    console.error(`port ${port} is already in use — stop the other server or pass --port=N`);
-  } else {
-    console.error(err);
-  }
-  process.exit(1);
-});
+createServer((req, res) => {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  let path = url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname;
+  try { path = decodeURIComponent(path); } catch { res.writeHead(400).end('bad request'); return; }
+  const file = resolve(join(root, normalize(path)));
+  if (file !== root && !file.startsWith(root + sep)) { res.writeHead(403).end('forbidden'); return; }
+  let size = 0;
+  try { const s = statSync(file); if (!s.isFile()) throw new Error('x'); size = s.size; }
+  catch { res.writeHead(404).end('not found'); return; }
+  res.writeHead(200, { 'content-type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream', 'content-length': size, 'cache-control': 'no-store' });
+  createReadStream(file).pipe(res);
+}).listen(port, '127.0.0.1', () => console.log(`game/ is on http://localhost:${port}`));
