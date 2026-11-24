@@ -1,12 +1,3 @@
-// Keyboard input for Vice Shores.
-//
-// Two kinds of input live here. Held keys (WASD and the arrows) report a
-// continuous state every frame — the car keeps accelerating while W is down.
-// One-shot presses (E to enter a car, Space to shoot, M for the map and so
-// on) are queued as bit flags: the game reads them once per step and they
-// clear, so a single tap never fires twice. The action constants are shared
-// with the game loop so the two sides can never drift apart.
-
 export const ACT = {
   ENTER: 1,
   SHOOT: 2,
@@ -72,7 +63,6 @@ export function createInput() {
   }
 
   return {
-    // Continuous movement state, read every frame.
     get forward() {
       return down('KeyW', 'ArrowUp') ? 1 : down('KeyS', 'ArrowDown') ? -1 : 0;
     },
@@ -82,7 +72,6 @@ export function createInput() {
     get sprint() {
       return shiftHeld;
     },
-    // One-shot flags, consumed once per step.
     takePressed() {
       const out = queued;
       queued = 0;
@@ -98,7 +87,6 @@ export function createInput() {
   };
 }
 
-// A scripted input for the staged screenshots: forward only, or nothing.
 export function scriptedInput(kind) {
   if (kind === 'DRIVE') {
     return {

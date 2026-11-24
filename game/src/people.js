@@ -1,13 +1,3 @@
-// People for Vice Shores: Rook and the pedestrians who fill the city.
-//
-// A person is a capsule torso, capsule limbs on pivot groups at the hips
-// and shoulders (so the walk cycle can swing them), a sphere head with a
-// nose and eyes, hair in one of four styles, and — for officers and for
-// Rook when he is aiming — a pistol in the right hand. Rook wears a brown
-// leather jacket; officers wear navy with a gold badge. Pedestrians get
-// random colours from the seeded stream, walk toward a target, and turn at
-// the edge of the world. Fallen pedestrians are frozen where they lie.
-
 export const SKINS = [0xe8b88a, 0xc98a5a, 0x8a5a3a, 0xf2c9a0, 0x6b4226];
 export const SHIRTS = [
   0x3a6ac2, 0xc23a5a, 0x3a9a5a, 0xe8b83a,
@@ -22,9 +12,6 @@ function capsule(r, len, mat) {
   return m;
 }
 
-// Build one person. Options: detail ('full' or 'low'), jacket (Rook's
-// leather), shirt / pants / skin / hair colours, hairStyle (0-3), officer,
-// scale. Returns the group plus the limb pivots and an aim() pose setter.
 export function makePerson(opts = {}) {
   const detail = opts.detail ?? 'full';
   const jacket = opts.jacket ?? false;
@@ -56,7 +43,6 @@ export function makePerson(opts = {}) {
   const skinMat = new THREE.MeshStandardMaterial({ color: skinCol, roughness: 0.8 });
   const hairMat = new THREE.MeshStandardMaterial({ color: hairCol, roughness: 0.9 });
 
-  // Torso: a capsule in the shirt colour — or brown leather for Rook.
   let torsoMat = shirtMat;
   if (jacket) {
     torsoMat = new THREE.MeshStandardMaterial({ color: 0x4a2a12, roughness: 0.55 });
@@ -67,7 +53,6 @@ export function makePerson(opts = {}) {
   torso.position.y = 1.15;
   group.add(torso);
 
-  // Belt and buckle.
   const beltMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 });
   const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.34, 0.09, 14), beltMat);
   belt.position.y = 0.88;
@@ -77,7 +62,6 @@ export function makePerson(opts = {}) {
   buckle.position.set(0, 0.88, 0.33);
   group.add(buckle);
 
-  // Legs on hip pivots, arms on shoulder pivots.
   const legs = [];
   for (const sx of [-0.14, 0.14]) {
     const hip = new THREE.Group();
@@ -110,7 +94,6 @@ export function makePerson(opts = {}) {
     arms.push(shoulder);
   }
 
-  // Neck, head, eyes, nose, mouth.
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.16, 10), skinMat);
   neck.position.y = 1.58;
   group.add(neck);
@@ -137,7 +120,6 @@ export function makePerson(opts = {}) {
   mouth.position.set(0, 1.7, 0.25);
   group.add(mouth);
 
-  // Hair, one of four styles.
   if (hairStyle === 0) {
     const cap = new THREE.Mesh(
       new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hairMat,
@@ -172,7 +154,6 @@ export function makePerson(opts = {}) {
     group.add(brim);
   }
 
-  // A pistol in the right hand, always there, drawn when aiming.
   const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 });
   const pistol = new THREE.Group();
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.06), gunMat);
@@ -184,7 +165,6 @@ export function makePerson(opts = {}) {
   pistol.rotation.x = Math.PI / 2;
   arms[1].add(pistol);
 
-  // An officer's gold badge on the chest.
   if (officer) {
     const badgeMat = new THREE.MeshStandardMaterial({
       color: 0xf2c94c, roughness: 0.3, metalness: 0.8,
@@ -194,7 +174,6 @@ export function makePerson(opts = {}) {
     group.add(badge);
   }
 
-  // Rook's jacket details: a collar and a white shirt panel at the chest.
   if (jacket) {
     const collarMat = new THREE.MeshStandardMaterial({ color: 0x2a1608, roughness: 0.7 });
     const collar = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.07, 8, 16), collarMat);
@@ -233,7 +212,6 @@ export function makePerson(opts = {}) {
   return { group, leftArm, rightArm, leftLeg, rightLeg, aim };
 }
 
-// Rook, the hero: brown leather jacket, blue jeans, dark hair.
 export function makeRook() {
   const rook = makePerson({
     detail: 'full', jacket: true, shirt: 0x6b4423, hairStyle: 0,
@@ -244,7 +222,6 @@ export function makeRook() {
   return rook;
 }
 
-// Twenty-six pedestrians, colours and places from the seeded stream.
 export function makePedestrians(rng) {
   const peds = [];
   for (let i = 0; i < 26; i++) {
@@ -277,8 +254,6 @@ export function makePedestrians(rng) {
   return peds;
 }
 
-// Walk the pedestrians: toward their target, turning at the world's edge,
-// legs and arms swinging in step. Fallen pedestrians are frozen.
 export function updatePedestrians(peds, dt, time) {
   for (const p of peds) {
     if (p.fallen) continue;

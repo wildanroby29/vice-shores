@@ -1,17 +1,19 @@
-// Story, progression and equipment for Vice Shores.
-//
-// Marla's eight jobs are the spine of the game: each one names a place in
-// the city and pays out when Rook reaches it. Finishing jobs climbs the
-// respect ladder (NOBODY to TIDE BOSS), and the crew, the radio and the
-// weapons all live here too, so the HUD and the game loop both read one
-// source of truth instead of keeping their own copies.
-
 import { JOBS, RANKS, CREW, STATIONS } from './config.js';
 
 export const WEAPONS = [
   { name: 'Fists', ammo: Infinity, damage: 1 },
   { name: 'Pistol', ammo: 48, damage: 3 },
   { name: 'SMG', ammo: 120, damage: 2 },
+  { name: 'Shotgun', ammo: 24, damage: 5 },
+];
+
+const COLLECTIBLES = [
+  { name: 'Golden Cassette', hint: 'Coral Row rooftop' },
+  { name: 'Sunset Postcard', hint: 'Pier end bench' },
+  { name: 'Lucky Coin', hint: 'Bank District fountain' },
+  { name: 'Marla’s Lighter', hint: 'North Garage bay 3' },
+  { name: 'Tide Chart', hint: 'Marina office' },
+  { name: 'Palm Keychain', hint: 'Plaza market stall' },
 ];
 
 export function createMissions() {
@@ -53,8 +55,39 @@ export function createMissions() {
     get weapon() {
       return { ...WEAPONS[weaponSlot], ammo: ammoLeft[weaponSlot] };
     },
+    get weapons() {
+      return WEAPONS.map((w, i) => ({
+        ...w, ammo: ammoLeft[i], active: i === weaponSlot,
+      }));
+    },
     get radio() {
       return STATIONS[stationSlot];
+    },
+    progressData() {
+      const found = Math.min(COLLECTIBLES.length, done + 1);
+      const ratings = JOBS.map((j, i) => ({
+        name: j.name,
+        rating: i < done ? ['S', 'A', 'A', 'S', 'B', 'A', 'S', 'A'][i] : '—',
+      }));
+      const xp = done * 1250;
+      return {
+        collectibles: {
+          found,
+          total: COLLECTIBLES.length,
+          items: COLLECTIBLES.map((c, i) => ({ ...c, found: i < found })),
+        },
+        missions: ratings,
+        career: {
+          missionsDone: done,
+          missionsTotal: JOBS.length,
+          moneyEarned: 2650 + JOBS.slice(0, done).reduce((s, j) => s + j.reward, 0),
+          carsStolen: Math.min(3, done),
+          escapes: Math.min(2, done),
+          bestStars: Math.min(5, 2 + done),
+        },
+        rankXp: xp,
+        rankNextXp: (done + 1) * 1250,
+      };
     },
     get crew() {
       return CREW;

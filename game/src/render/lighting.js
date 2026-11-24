@@ -1,14 +1,3 @@
-// Lighting for Vice Shores.
-//
-// One warm sun (directional, with soft shadows), a neutral hemisphere so
-// the roads never read blue, and a cool fill from the opposite side. The
-// hemisphere colours matter more than they look: a saturated blue sky
-// colour in the hemisphere is what turned the old roads navy and lavender,
-// so both hemisphere colours here are deliberately desaturated — a neutral
-// grey-blue above, a warm brown-grey below. The sun follows the hero, and
-// its elevation and azimuth come from the clock, so golden hour, sunset and
-// night each light the city differently while the exposure stays fixed.
-
 import { DAYTIME } from '../config.js';
 
 export function createLighting(scene, renderer) {
@@ -33,8 +22,7 @@ export function createLighting(scene, renderer) {
   scene.add(sun);
   scene.add(sun.target);
 
-  // Desaturated on purpose — see the note above.
-  const hemi = new THREE.HemisphereLight(0x9a9da2, 0x9a7a5c, 0.5);
+  const hemi = new THREE.HemisphereLight(0x9a9da2, 0x8a8a8a, 0.5);
   scene.add(hemi);
 
   const fill = new THREE.DirectionalLight(0xb0bccd, 0.35);
@@ -44,7 +32,7 @@ export function createLighting(scene, renderer) {
   function setTime(presetKey, target) {
     const preset = DAYTIME[presetKey];
     const isNight = presetKey === 'night';
-    const elev = isNight ? 0.05 : 0.3;
+    const elev = isNight ? 0.05 : 0.12;
     const azim = ((preset.hour - 12) / 12) * Math.PI + 0.6;
     const dir = new THREE.Vector3(
       Math.cos(elev) * Math.sin(azim),
@@ -69,8 +57,6 @@ export function createLighting(scene, renderer) {
     scene.fog = null;
   }
 
-  // A small faint dark ellipse under a car or a person. Kept small and
-  // faint on purpose — a big pale octagon under the hero reads as a bug.
   function blobShadow(scaleX, scaleZ, opacity) {
     const geo = new THREE.CircleGeometry(1, 24);
     const mat = new THREE.MeshBasicMaterial({

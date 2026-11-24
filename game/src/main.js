@@ -1,13 +1,3 @@
-// Boot for Vice Shores.
-//
-// Reads the URL (?shot=, ?seed=, ?detail=low, ?flat=1, ?hud=old), builds
-// the game from the seeded stream, and either stages one screenshot or
-// runs the real game: a title screen with save slots, then play — driving
-// and walking, missions, police, the map and the shop — stepped in fixed
-// 1/60-second steps. In shot mode the page stages the scene, paints twice
-// and raises window.__shotReady so the screenshot tool knows the frame is
-// final.
-
 import { makeRng } from './random.js';
 import { createGame } from './render3d.js';
 import { createHud } from './hud.js';
@@ -57,12 +47,15 @@ window.addEventListener('keydown', () => audio.unlockAudio(), { once: true });
 window.addEventListener('pointerdown', () => audio.unlockAudio(), { once: true });
 
 if (shotName) {
-  // One staged screenshot.
   runShot(shotName, game);
   hud.hideTitle();
   if (shotName === 'title') {
     hud.showTitleCard();
     hud.setHudVisible(false);
+  } else if (shotName === 'progress') {
+    hud.hideTitleCard();
+    hud.setHudVisible(false);
+    hud.showProgress(game.progressState());
   } else if (shotName.startsWith('asset')) {
     hud.hideTitleCard();
     hud.setHudVisible(false);
@@ -79,7 +72,6 @@ if (shotName) {
     });
   });
 } else {
-  // The real game.
   let orbitView = false;
   let menuIndex = 0;
 
@@ -166,9 +158,6 @@ if (shotName) {
       input.takePressed();
     }
 
-    // The camera follows the mode: orbit on the title screen and when the
-    // player asks for the scenic view, over-the-shoulder on foot, chase in
-    // the car.
     if (game.screen === 'title') game.camMode = 'title';
     else if (game.screen === 'play' || game.screen === 'paused') {
       if (orbitView) game.camMode = 'title';

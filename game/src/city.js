@@ -1,18 +1,5 @@
-// The city of Vice Shores: ground, streets, beach, sea, buildings, palms,
-// bushes, the pier, boats and street dressing.
-//
-// The city is a grid. Blocks are 44 metres, streets 16, so block centres
-// sit every 60 metres from -210 to 210. The beach and the sea take the east
-// and south edges; the pier runs south from the marina into the water. Every
-// random choice — a building's size and palette, a palm's height, a boat's
-// angle — draws from the one seeded stream, in the order the city is built,
-// so the same seed always builds the same city. The order matters: ground
-// and roads first (no randomness), then buildings, palms, bushes, pier and
-// boats, street dressing, and the plaza last.
-
 import { PAINT } from './config.js';
 
-// Seven palettes so the city is not one colour: base wall, trim, roof.
 export const PALETTES = [
   { base: 0xe8d9b8, trim: 0xc96f4a, roof: 0x8a6f5c }, // cream
   { base: 0xd9a05a, trim: 0x8a3a2a, roof: 0x6b3a2a }, // terracotta
@@ -23,10 +10,6 @@ export const PALETTES = [
   { base: 0xf5e6c8, trim: 0xb3543f, roof: 0x7a4a3a }, // warm white
 ];
 
-// A window texture, painted fresh per building on a 128x256 canvas: the
-// palette's base colour, pale pilaster stripes, dark floor bands, and a grid
-// of windows — each one either lit warm gold or dark — with a pale highlight
-// across the top of every pane, darkening toward the base of the wall.
 function paintWindowTexture(palette, rng) {
   const c = document.createElement('canvas');
   c.width = 128;
@@ -34,13 +17,10 @@ function paintWindowTexture(palette, rng) {
   const g = c.getContext('2d');
   g.fillStyle = '#' + palette.base.toString(16).padStart(6, '0');
   g.fillRect(0, 0, 128, 256);
-  // Pale pilaster stripes, 4 px wide every 26 px.
   g.fillStyle = 'rgba(255,255,255,0.16)';
   for (let x = 0; x < 128; x += 26) g.fillRect(x, 0, 4, 256);
-  // Dark floor bands, 3 px tall every 22 px.
   g.fillStyle = 'rgba(0,0,0,0.14)';
   for (let y = 0; y < 256; y += 22) g.fillRect(0, y, 128, 3);
-  // Windows on a grid: x from 10 step 26, y from 8 step 22.
   for (let y = 8; y < 256; y += 22) {
     for (let x = 10; x < 128; x += 26) {
       g.fillStyle = 'rgba(0,0,0,0.45)';
@@ -52,7 +32,6 @@ function paintWindowTexture(palette, rng) {
       g.fillRect(x, y, 16, 3);
     }
   }
-  // Darken toward the base of the wall.
   const grad = g.createLinearGradient(0, 180, 0, 256);
   grad.addColorStop(0, 'rgba(0,0,0,0)');
   grad.addColorStop(1, 'rgba(0,0,0,0.35)');
@@ -71,9 +50,6 @@ function box(w, h, d, mat, x, y, z) {
   return m;
 }
 
-// One building: a core box in its window texture, dressed with pilasters,
-// floor bands, a shopfront, cornice and parapet, and — on tall towers — a
-// setback top, balconies, rooftop props, an awning and a lit sign.
 export function makeBuilding(x, z, w, d, h, palette, rng, detail = 'full', lit = true) {
   const group = new THREE.Group();
   const baseMat = new THREE.MeshStandardMaterial({ color: palette.base, roughness: 0.85 });
@@ -90,7 +66,6 @@ export function makeBuilding(x, z, w, d, h, palette, rng, detail = 'full', lit =
   group.add(core);
 
   if (detail === 'full') {
-    // Pilasters on the front and back faces, proud of the wall.
     const cols = Math.max(2, Math.floor(w / 4.5));
     for (let i = 0; i < cols; i++) {
       const px = -w / 2 + ((i + 0.5) * w) / cols;
@@ -103,13 +78,11 @@ export function makeBuilding(x, z, w, d, h, palette, rng, detail = 'full', lit =
       group.add(box(0.35, h, 0.5, trimMat, w / 2 + 0.1, h / 2, pz));
       group.add(box(0.35, h, 0.5, trimMat, -w / 2 - 0.1, h / 2, pz));
     }
-    // Floor bands.
     const floors = Math.max(2, Math.floor(h / 3.6));
     for (let f = 0; f < floors - 1; f++) {
       const y = (h * (f + 1)) / floors;
       group.add(box(w + 0.5, 0.35, d + 0.5, trimMat, 0, y, 0));
     }
-    // Ground-floor shopfront: dark glass panes with a warm lit interior.
     const shopN = Math.max(1, Math.floor(w / 6));
     const paneW = w / shopN - 1.2;
     const glassMat = new THREE.MeshStandardMaterial({
@@ -120,10 +93,8 @@ export function makeBuilding(x, z, w, d, h, palette, rng, detail = 'full', lit =
       const px = -w / 2 + ((i + 0.5) * w) / shopN;
       group.add(box(paneW, 2.6, 0.12, glassMat, px, 1.7, d / 2 + 0.03));
     }
-    // Cornice and parapet.
     group.add(box(w + 0.8, 0.5, d + 0.8, roofMat, 0, h + 0.2, 0));
     group.add(box(w + 0.4, 0.9, d + 0.4, roofMat, 0, h + 0.7, 0));
-    // Setback tower top on tall buildings, with its own cornice.
     if (h > 16) {
       const tw = w * 0.62;
       const td = d * 0.62;
@@ -131,7 +102,6 @@ export function makeBuilding(x, z, w, d, h, palette, rng, detail = 'full', lit =
       group.add(box(tw, th, td, trimMat, 0, h + h * 0.09, 0));
       group.add(box(tw + 0.8, 0.5, td + 0.8, roofMat, 0, h + th + 0.2, 0));
     }
-    // Rooftop props.
     const acMat = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, metalness: 0.4, roughness: 0.6 });
     group.add(box(1.6, 0.8, 1.2, acMat, -w / 4, h + 0.9, -d / 4));
     const tankMat = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.9 });
@@ -143,13 +113,11 @@ export function makeBuilding(x, z, w, d, h, palette, rng, detail = 'full', lit =
     const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 4, 6), antMat);
     ant.position.set(w / 4, h + 3.2, -d / 4);
     group.add(ant);
-    // Awning and lit sign over the shopfront.
     group.add(box(w * 0.7, 0.3, 2.2, trimMat, 0, 3.4, d / 2 + 0.9));
     const signMat = new THREE.MeshStandardMaterial({
       color: 0x222222, emissive: palette.trim, emissiveIntensity: 0.9, roughness: 0.6,
     });
     group.add(box(w * 0.5, 1.1, 0.3, signMat, 0, 5.2, d / 2 + 0.2));
-    // Balconies with rails on tall buildings, up to three floors.
     if (h > 16) {
       const railMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, metalness: 0.5, roughness: 0.6 });
       let f = 0;
@@ -167,9 +135,6 @@ export function makeBuilding(x, z, w, d, h, palette, rng, detail = 'full', lit =
   return group;
 }
 
-// A palm: a trunk bent along an arc, ring bands, drooping fronds and
-// coconuts. The bend is done by moving the trunk's vertices — a straight
-// cylinder would read as a lamp post.
 export function makePalm(scale, rng, detail = 'full') {
   const group = new THREE.Group();
   const h = (7 + rng() * 3) * scale;
@@ -199,7 +164,6 @@ export function makePalm(scale, rng, detail = 'full') {
   trunk.castShadow = true;
   group.add(trunk);
 
-  // Ring bands up the trunk, following the bend.
   const ringMat = new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.9 });
   for (let ring = 0; ring < 5; ring++) {
     const k = 0.2 + ring * 0.18;
@@ -211,7 +175,6 @@ export function makePalm(scale, rng, detail = 'full') {
     group.add(torus);
   }
 
-  // The crown sits at the top of the bend.
   const crownX = Math.sin(1.1) * 1.0;
   const frondMat = new THREE.MeshStandardMaterial({
     color: 0x4a9a3a, emissive: 0x1a2a10, emissiveIntensity: 0.55,
@@ -240,7 +203,6 @@ export function makePalm(scale, rng, detail = 'full') {
     group.add(holder);
   }
 
-  // Coconuts clustered under the crown.
   const nutMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 });
   for (let i = 0; i < 3; i++) {
     const nut = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), nutMat);
@@ -248,8 +210,6 @@ export function makePalm(scale, rng, detail = 'full') {
     group.add(nut);
   }
 
-  // The height already carries the scale (h = (7 + rand*3) * scale), so the
-  // group itself is not scaled again.
   return { group, height: h };
 }
 
@@ -268,8 +228,6 @@ function radialSpriteTexture() {
   return tex;
 }
 
-// Build a 2D side-profile shape, extrude it across a width, and rotate it so
-// the profile's length lands on +Z (front) and the extrusion on X (width).
 function extrudeProfile(points, width, bevel) {
   const shape = new THREE.Shape();
   shape.moveTo(points[0][0], points[0][1]);
@@ -283,9 +241,6 @@ function extrudeProfile(points, width, bevel) {
   return geo;
 }
 
-// One boat: a hull extruded from a side profile — a pointed bow rising out
-// of the water, a flat run to a square transom — with a deck, a cabin with
-// dark glass, a mast, and a white wake trailing behind it.
 function makeBoat(i, rng) {
   const group = new THREE.Group();
   const hullCols = [0xf2f2f2, 0x3a7ca5, 0xe8b83a, 0xc96f4a];
@@ -315,7 +270,6 @@ function makeBoat(i, rng) {
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.4, 8), mastMat);
   mast.position.set(0, 3.2, -1.2);
   group.add(mast);
-  // Wake: a white V plus a centre line trailing behind the stern.
   const wakeMat = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false,
   });
@@ -343,11 +297,6 @@ function makeBoat(i, rng) {
   return group;
 }
 
-// The whole city, built in one pass in the order the spec fixes: ground and
-// roads, beach and sea, buildings, palms, bushes, pier and boats, street
-// dressing, plaza. Returns the group plus the data the game needs: the
-// building footprints (for collision), the building spots (for the minimap)
-// and the boats (the game bobs them).
 export function buildCity(rng) {
   const group = new THREE.Group();
   const colliders = [];
@@ -355,7 +304,6 @@ export function buildCity(rng) {
   const boats = [];
   const glowTex = radialSpriteTexture();
 
-  // Grass base.
   const grass = new THREE.Mesh(
     new THREE.PlaneGeometry(2000, 2000),
     new THREE.MeshStandardMaterial({ color: PAINT.grass, roughness: 1 }),
@@ -364,7 +312,6 @@ export function buildCity(rng) {
   grass.receiveShadow = true;
   group.add(grass);
 
-  // Roads: a grid every 60 m, horizontal and vertical, with centre dashes.
   const roadMat = new THREE.MeshStandardMaterial({ color: PAINT.asphalt, roughness: 0.95 });
   const dashMat = new THREE.MeshStandardMaterial({ color: PAINT.lane, roughness: 0.9 });
   const dashGeoH = new THREE.PlaneGeometry(3, 0.5);
@@ -393,7 +340,6 @@ export function buildCity(rng) {
     }
   }
 
-  // Sidewalks.
   const walkMat = new THREE.MeshStandardMaterial({ color: PAINT.sidewalk, roughness: 0.95 });
   const walkGeoA = new THREE.PlaneGeometry(4, 440);
   const walkGeoB = new THREE.PlaneGeometry(440, 4);
@@ -410,8 +356,6 @@ export function buildCity(rng) {
   w3.position.set(0, 0.025, 10);
   group.add(w3);
 
-  // Beach sand and the sea. The sea planes are subdivided so the depth
-  // fight at grazing angles does not turn the water green.
   const sandMat = new THREE.MeshStandardMaterial({ color: PAINT.sand, roughness: 1 });
   const sandE = new THREE.Mesh(new THREE.PlaneGeometry(44, 460, 4, 32), sandMat);
   sandE.rotation.x = -Math.PI / 2;
@@ -433,8 +377,7 @@ export function buildCity(rng) {
   seaS.position.set(0, 0.12, 900);
   group.add(seaS);
 
-  // Buildings on block centres — never on the beach side (bx >= 3) and
-  // never on the central plaza (0, 0).
+  let bi = 0;
   for (let bx = -4; bx <= 4; bx++) {
     for (let bz = -4; bz <= 4; bz++) {
       if (bx >= 3) continue;
@@ -444,7 +387,8 @@ export function buildCity(rng) {
       const w = 18 + rng() * 14;
       const d = 18 + rng() * 14;
       const h = 10 + rng() * 26 + (Math.abs(bx) + Math.abs(bz) < 3 ? 10 : 0);
-      const palette = PALETTES[Math.floor(rng() * PALETTES.length)];
+      const palette = PALETTES[bi % PALETTES.length];
+      bi += 1;
       const b = makeBuilding(cx, cz, w, d, h, palette, rng, 'full', true);
       group.add(b);
       colliders.push({ x: cx, z: cz, w: w + 2, d: d + 2 });
@@ -452,7 +396,6 @@ export function buildCity(rng) {
     }
   }
 
-  // Palms along the boulevard, plus a second row set back from it.
   const palmSpots = [];
   for (let z = -190; z <= 190; z += 18) {
     const scale = 0.85 + (Math.abs(z) % 3) * 0.2;
@@ -469,31 +412,28 @@ export function buildCity(rng) {
     palmSpots.push({ x: 150, z });
   }
 
-  // Bushes and flower beds on the beach strip, clear of the boulevard's
-  // camera lines — the old big domes sat on the road edge and read as giant
-  // green blobs.
   const flowerCols = [0xe85a8a, 0xf2c94c, 0xe85a3a, 0x9a5ae8];
   for (let z = -180; z <= 180; z += 24) {
+    if (z >= -30 && z <= 70) continue;
     const bushMat = new THREE.MeshStandardMaterial({ color: 0x3a6a2a, roughness: 0.9 });
-    const bush = new THREE.Mesh(new THREE.SphereGeometry(0.7 + rng() * 0.3, 12, 10), bushMat);
-    bush.scale.y = 0.55;
-    bush.position.set(197, 0.45, z);
+    const bush = new THREE.Mesh(new THREE.SphereGeometry(0.55 + rng() * 0.2, 12, 10), bushMat);
+    bush.scale.y = 0.45;
+    bush.position.set(203, 0.35, z);
     bush.castShadow = true;
     group.add(bush);
     const bedMat = new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.9 });
-    group.add(box(4.2, 0.4, 1.3, bedMat, 197, 0.2, z + 6));
+    group.add(box(4.2, 0.4, 1.3, bedMat, 203, 0.2, z + 6));
     for (let f = 0; f < 6; f++) {
       const flMat = new THREE.MeshStandardMaterial({
         color: flowerCols[f % flowerCols.length], roughness: 0.7,
       });
       const fl = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), flMat);
       fl.scale.y = 0.45;
-      fl.position.set(197 + (f - 2.5) * 0.7, 0.5, z + 6);
+      fl.position.set(203 + (f - 2.5) * 0.7, 0.5, z + 6);
       group.add(fl);
     }
   }
 
-  // The pier: wooden deck, posts, rails, lamps — and the boats out east.
   const deckCanvas = document.createElement('canvas');
   deckCanvas.width = 128;
   deckCanvas.height = 512;
@@ -543,11 +483,9 @@ export function buildCity(rng) {
     }
   }
 
-  // Pier lamps: small globes, warm emissive, a small halo — never the big
-  // blown-out blobs the old lamps were.
   const pierPoleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.6, metalness: 0.4 });
   const globeMat = new THREE.MeshStandardMaterial({
-    color: 0xfff2c8, emissive: 0xffd98a, emissiveIntensity: 1.2, roughness: 0.4,
+    color: 0xfff2c8, emissive: 0xffd98a, emissiveIntensity: 0.8, roughness: 0.4,
   });
   for (let z = 160; z <= 232; z += 12) {
     for (const lx of [181.2, 188.8]) {
@@ -558,7 +496,7 @@ export function buildCity(rng) {
       head.position.set(lx, 4.3, z);
       group.add(head);
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: glowTex, color: 0xffd98a, opacity: 0.25, transparent: true, depthWrite: false,
+        map: glowTex, color: 0xffd98a, opacity: 0.15, transparent: true, depthWrite: false,
       }));
       halo.position.set(lx, 4.3, z);
       halo.scale.set(1.2, 1.2, 1);
@@ -566,7 +504,6 @@ export function buildCity(rng) {
     }
   }
 
-  // Boats in the water east of the pier, plus sun glitter on the sea.
   for (let i = 0; i < 6; i++) {
     const boat = makeBoat(i, rng);
     group.add(boat);
@@ -586,8 +523,6 @@ export function buildCity(rng) {
     group.add(gl);
   }
 
-  // Street dressing: crosswalks, edge lines, a second yellow dash row,
-  // manholes, lamps, benches, bins, bollards and hydrants.
   const whiteMat = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false,
   });
@@ -640,8 +575,6 @@ export function buildCity(rng) {
     group.add(hole);
   }
 
-  // Street lamps along the boulevard and the central road, each with a
-  // bench, a bin, bollards and a hydrant nearby.
   const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.6, metalness: 0.4 });
   const benchMat = new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.9 });
   const binMat = new THREE.MeshStandardMaterial({ color: 0x3a5a3a, roughness: 0.9 });
@@ -659,16 +592,15 @@ export function buildCity(rng) {
     head.position.set(x + armDx * 1.4, 5.35, z + armDz * 1.4);
     group.add(head);
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: 0xffd98a, opacity: 0.25, transparent: true, depthWrite: false,
+      map: glowTex, color: 0xffd98a, opacity: 0.15, transparent: true, depthWrite: false,
     }));
     halo.position.set(x + armDx * 1.4, 5.35, z + armDz * 1.4);
-    halo.scale.set(1.2, 1.2, 1);
+    halo.scale.set(0.9, 0.9, 1);
     group.add(halo);
   }
   for (let z = -168; z <= 190; z += 28) {
     streetLamp(172, z, 1, 0);
     streetLamp(188, z + 14, -1, 0);
-    // Bench, bin, bollards and hydrant by the west-side lamp.
     group.add(box(1.8, 0.14, 0.6, benchMat, 170.5, 0.5, z + 7));
     group.add(box(1.8, 0.5, 0.1, benchMat, 170.5, 0.85, z + 7.3));
     const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.3, 0.9, 10), binMat);
@@ -688,7 +620,6 @@ export function buildCity(rng) {
     streetLamp(x, 8, 0, -1);
   }
 
-  // Central plaza: a fountain at the middle of the city.
   const fountMat = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.7 });
   const fountain = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 7, 1.2, 24), fountMat);
   fountain.position.set(30, 0.6, 30);

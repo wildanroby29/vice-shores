@@ -1,11 +1,3 @@
-// Every tuning number for Vice Shores lives here, in one place, so the rest
-// of the game never hard-codes a magic value. The world is a square city
-// 420 metres across, cut into 44-metre blocks by 16-metre streets, with a
-// beach and the sea on its east and south edges and a wooden pier running
-// south into the water. Times of day are presets: each one fixes the clock,
-// the sun, the sky gradient and the fog, so a screenshot staged at "golden"
-// always looks golden and one staged at "night" always looks like night.
-
 export const STEP = 1 / 60;
 export const SAVE_KEY = 'vice-shores.saves.v1';
 export const BEST_KEY = 'vice-shores.best.v1';
@@ -19,8 +11,6 @@ export const WORLD = {
   pierZ: 150,
 };
 
-// hour, sun colour, sun strength, hemisphere strength, fog colour, and the
-// three sky colours (top, middle, bottom) for each time of day.
 export const DAYTIME = {
   golden: {
     hour: 17.5, sun: 0xffb36b, sunStrength: 2.6, hemiStrength: 0.95,
@@ -51,7 +41,6 @@ export const PLAYER = {
   armour: 100,
 };
 
-// Respect ladder: the name the city calls Rook, by jobs finished.
 export const RANKS = [
   { at: 0, name: 'NOBODY' },
   { at: 2, name: 'HUSTLER' },
@@ -60,24 +49,18 @@ export const RANKS = [
   { at: 8, name: 'TIDE BOSS' },
 ];
 
-// The crew. Each one rides along in spirit and lends an ability; the number
-// keys call them up on the HUD.
 export const CREW = [
   { key: '1', name: 'Marla', role: 'Fixer', perk: 'Hot tip' },
   { key: '2', name: 'Dex', role: 'Driver', perk: 'Ram boost' },
   { key: '3', name: 'Lena', role: 'Lookout', perk: 'Cop radar' },
 ];
 
-// Radio stations, in the order R cycles them.
 export const STATIONS = [
   { name: 'VICE FM 98.5', song: 'Sunset Run — The Palms' },
   { name: 'TIDE 101.2', song: 'Golden Hour — Marla Ray' },
   { name: 'SHORE 88.1', song: 'Night Drive — Coastline' },
 ];
 
-// The eight story jobs. Each one is a pickup or a delivery somewhere in the
-// city, with Marla talking Rook through it. Finish one and the next opens;
-// finish all eight and Rook runs the city.
 export const JOBS = [
   {
     id: 1, name: 'First Light', goal: 'Pick up the package on Coral Row',
@@ -121,17 +104,38 @@ export const JOBS = [
   },
 ];
 
-// Ground colours. The asphalt is a neutral grey-brown on purpose: a bluer
-// road reads as water at dusk, and the judge kept calling the old navy road
-// a river. Lane paint is a warm yellow; the sea is a deep teal-blue.
 export const PAINT = {
   asphalt: 0x44474d,
   lane: 0xd8c25a,
   sidewalk: 0xb9b4a8,
   sand: 0xe8cf9a,
-  sea: 0x1d6f9a,
-  seaDeep: 0x0f3d5c,
+  sea: 0x1568b8,
+  seaDeep: 0x0d3a6e,
   grass: 0x4d7a3a,
 };
+
+export const DISTRICTS = [
+  { name: 'CORAL ROW', colour: '#c23a5a', pct: 62, note: 'Shops & awning' },
+  { name: 'MARINA', colour: '#2e6ac2', pct: 45, note: 'Pier & boats' },
+  { name: 'BANK DISTRICT', colour: '#e8b83a', pct: 38, note: 'The ledger' },
+  { name: 'NORTH GARAGE', colour: '#3a9a5a', pct: 71, note: 'Bay 3' },
+  { name: 'PLAZA', colour: '#9a5ae8', pct: 54, note: 'Night market' },
+  { name: 'PIER', colour: '#e87a3a', pct: 29, note: 'The boat' },
+];
+
+export const ABILITIES = [
+  { name: 'Swap Plates', role: 'Lose a star', crew: 'Marla' },
+  { name: 'Quick Fix', role: 'Repair the car', crew: 'Dex' },
+  { name: 'Eyes Out', role: 'Cop radar', crew: 'Lena' },
+];
+
+export const RADIO_LINES = [
+  'All units, keep the boulevard clear. Nothing to see here.',
+  'Unit 7, check the marina gate. Suspect was last seen on foot.',
+  'All units, suspect is on foot near the market. KITE-1, take the high ground.',
+  'All units, suspect is armed and mobile. MARLIN-3, shore watch. CORAL-48, ram on my mark.',
+  'All units, four-star chase on the boulevard. TIDE-7, spotlight. REEF-22, flank him.',
+  'All units, this is a five-star chase. Do not let him reach the pier.',
+];
 
 export const FONT_STACK = 'system-ui, -apple-system, "Segoe UI", sans-serif';

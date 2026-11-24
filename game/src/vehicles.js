@@ -1,21 +1,8 @@
-// Vehicles for Vice Shores: the hero GT, police cars and traffic.
-//
-// Every car is built the same way — a chamfered lower body and a tapered
-// glass cabin, both extruded from 2D side profiles, with wheels, arches,
-// bumpers, mirrors, seams and lights. The paint is deliberately matte:
-// clearcoat and env-map intensity are kept low because a glossy top face
-// caught the night fill light and blew the hero's roof and hood to white.
-// The hero GT gets a rear wing, a racing stripe and a front splitter; the
-// police cars get a black-and-white livery, a push bar and a flashing
-// light bar. Traffic is fourteen cars in random colours, driving the grid.
-
 export const TRAFFIC_COLOURS = [
   0xc23a2e, 0x2e6ac2, 0xe8b83a, 0x3a9a5a,
   0xeeeeee, 0x222222, 0x7a3aa8, 0xe87a3a,
 ];
 
-// Build a 2D side-profile shape, extrude it across a width, and rotate it
-// so the profile's length lands on +Z (front) and the extrusion on X.
 function extrudeProfile(points, width, bevel) {
   const shape = new THREE.Shape();
   shape.moveTo(points[0][0], points[0][1]);
@@ -36,8 +23,6 @@ function stdBox(w, h, d, mat, x, y, z) {
   return m;
 }
 
-// One wheel: tyre, sidewall rings, rim disc, five spokes and a hub, all in
-// a group whose X rotation is the spin. The axle runs along X.
 function makeWheel() {
   const group = new THREE.Group();
   const tyreMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.95 });
@@ -75,10 +60,6 @@ function makeWheel() {
   return group;
 }
 
-// A car in a colour. Options: detail ('full' or 'low'), spoiler (the GT's
-// rear wing), clearcoat (the paint's clearcoat value — the paint material
-// itself stays matte regardless). Returns the group with its wheels and
-// light lenses attached as userData for the game loop.
 export function makeCar(colour, opts = {}) {
   const detail = opts.detail ?? 'full';
   const spoiler = opts.spoiler ?? false;
@@ -97,8 +78,6 @@ export function makeCar(colour, opts = {}) {
     return { group, wheels, paintMat };
   }
 
-  // Lower body: chamfered, 4.4 long, 0.55 tall, 1.9 wide. The hood and
-  // trunk sit lower than the cabin.
   const bodyGeo = extrudeProfile(
     [[2.2, 0.02], [2.2, 0.42], [1.95, 0.55], [-1.95, 0.55], [-2.2, 0.42], [-2.2, 0.02]],
     1.9, 0.07,
@@ -108,7 +87,6 @@ export function makeCar(colour, opts = {}) {
   body.castShadow = true;
   group.add(body);
 
-  // Cabin: a tapered glasshouse with sloped windshield and rear window.
   const glassMat = new THREE.MeshPhysicalMaterial({
     color: 0x0e1a24, roughness: 0.15, metalness: 0.1,
     clearcoat: 0.15, envMapIntensity: 0.12, transparent: true, opacity: 0.96,
@@ -122,8 +100,6 @@ export function makeCar(colour, opts = {}) {
   cabin.castShadow = true;
   group.add(cabin);
 
-  // Roof panel in body colour, plain matte — never glass, never clearcoat.
-  // A clearcoat roof mirrors the heli spotlight and the sky and blows white.
   const roofMat = new THREE.MeshStandardMaterial({
     color: colour, roughness: 0.7, metalness: 0, envMapIntensity: 0.05,
   });
@@ -136,7 +112,6 @@ export function makeCar(colour, opts = {}) {
   roof.castShadow = true;
   group.add(roof);
 
-  // Wheel arches: dark recess rings above each wheel.
   const archMat = new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 0.9 });
   for (const ax of [-0.96, 0.96]) {
     for (const az of [-1.45, 1.45]) {
@@ -147,7 +122,6 @@ export function makeCar(colour, opts = {}) {
     }
   }
 
-  // Four wheels.
   for (const wx of [-0.95, 0.95]) {
     for (const wz of [-1.45, 1.45]) {
       const wheel = makeWheel();
@@ -157,7 +131,6 @@ export function makeCar(colour, opts = {}) {
     }
   }
 
-  // Bumpers, side skirts, mirrors, door seams.
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.4 });
   group.add(stdBox(1.95, 0.26, 0.22, darkMat, 0, 0.48, 2.2));
   group.add(stdBox(1.95, 0.26, 0.22, darkMat, 0, 0.48, -2.2));
@@ -170,7 +143,6 @@ export function makeCar(colour, opts = {}) {
     }
   }
 
-  // Headlights and taillights, emissive so they glow at night.
   const headMat = new THREE.MeshStandardMaterial({
     color: 0xfff2c8, emissive: 0xffe9a0, emissiveIntensity: 1.6, roughness: 0.3,
   });
@@ -182,7 +154,6 @@ export function makeCar(colour, opts = {}) {
     group.add(stdBox(0.45, 0.15, 0.08, tailMat, sx, 0.78, -2.22));
   }
 
-  // The GT's extras: rear wing on struts, racing stripe, front splitter.
   if (spoiler) {
     const wingMat = paintMat;
     group.add(stdBox(1.8, 0.07, 0.48, wingMat, 0, 1.52, -2.0));
@@ -199,11 +170,9 @@ export function makeCar(colour, opts = {}) {
   return { group, wheels, paintMat };
 }
 
-// The hero GT Sunline: orange, winged, striped.
 export function makeHeroCar() {
   const car = makeCar(0xe87a1a, { detail: 'full', spoiler: true, clearcoat: 0.45 });
   car.group.position.set(150, 0, -20);
-  // A soft dark ellipse under the car, grounding it on the road.
   const shadowGeo = new THREE.CircleGeometry(1, 24);
   const shadowMat = new THREE.MeshBasicMaterial({
     color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false,
@@ -217,9 +186,6 @@ export function makeHeroCar() {
   return car;
 }
 
-// A police car: black body, white doors and roof band, push bar, and a
-// light bar whose red and blue lenses alternate. The flash phase is random
-// per car so the fleet does not blink in unison.
 export function makePoliceCar(rng) {
   const car = makeCar(0x1a1a22, { detail: 'full', spoiler: false, clearcoat: 0 });
   const g = car.group;
@@ -254,8 +220,6 @@ export function makePoliceCar(rng) {
   return { ...car, redMat, blueMat, light, phase };
 }
 
-// Flash one police car's light bar: the lenses alternate red-bright /
-// blue-dim and back on a sine, and the point light follows.
 export function flashPolice(car, time) {
   const s = Math.sin(time * 10 + (car.phase ?? 0));
   const redOn = s > 0;
@@ -265,7 +229,6 @@ export function flashPolice(car, time) {
   car.light.intensity = 6 + Math.sin(time * 10) * 3;
 }
 
-// Fourteen traffic cars on the grid, in random colours and lanes.
 export function makeTraffic(rng) {
   const cars = [];
   for (let i = 0; i < 14; i++) {
@@ -294,8 +257,6 @@ export function makeTraffic(rng) {
   return cars;
 }
 
-// Drive the traffic: along its road, turning around past the city edge,
-// wheels spinning as it goes.
 export function updateTraffic(cars, dt) {
   for (const car of cars) {
     const g = car.group;

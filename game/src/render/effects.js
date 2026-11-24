@@ -1,10 +1,3 @@
-// Transient effects for Vice Shores: smoke, muzzle flashes, tracers and
-// sparks. Everything here is a sprite or a thin stretched box that lives
-// for a fraction of a second and then removes itself. The smoke is kept
-// small and faint on purpose — the old big white sprites read as a huge
-// haze swallowing the hero car, so every puff is capped at car length and
-// at 0.25 opacity.
-
 function makeRadial(inner, outer) {
   const c = document.createElement('canvas');
   c.width = 64;
@@ -76,15 +69,19 @@ export function createEffects(scene) {
   }
 
   function muzzle(x, y, z) {
-    flame(x, y, z, 1.1);
-    const light = new THREE.PointLight(0xffc46b, 4, 12);
-    light.position.set(x, y, z);
-    scene.add(light);
+    const mat = new THREE.SpriteMaterial({
+      map: fireTex, color: 0xffe9a8, opacity: 0.85,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const spr = new THREE.Sprite(mat);
+    spr.position.set(x, y, z);
+    spr.scale.set(0.35, 0.35, 1);
+    scene.add(spr);
     add({
-      mesh: light, age: 0, life: 0.12,
+      mesh: spr, age: 0, life: 0.08,
       tick(dt) {
         this.age += dt;
-        light.intensity = 4 * (1 - this.age / 0.12);
+        mat.opacity = 0.85 * (1 - this.age / 0.08);
       },
     });
   }

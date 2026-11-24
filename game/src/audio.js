@@ -1,10 +1,3 @@
-// Sound for Vice Shores, made entirely with the Web Audio API — no audio
-// files at all. Everything is a small oscillator or a burst of filtered
-// noise, so the game ships no sound assets and still hums, wails and bangs.
-// The audio context is created lazily on the first user gesture (browsers
-// block sound before one), and every function below is a safe no-op until
-// the context exists, which also keeps the staged screenshots silent.
-
 let ctx = null;
 let engineNodes = null;
 let sirenNodes = null;
@@ -21,7 +14,6 @@ function ensureCtx() {
   return ctx;
 }
 
-// Call this from a real user gesture (click / keypress) to unlock sound.
 export function unlockAudio() {
   const c = ensureCtx();
   if (c && c.state === 'suspended') c.resume().catch(() => {});
@@ -42,12 +34,10 @@ function blipTone(freq, dur, type, vol, slideTo) {
   osc.stop(c.currentTime + dur);
 }
 
-// A short UI blip.
 export function blip() {
   blipTone(660, 0.09, 'sine', 0.12, 880);
 }
 
-// A gunshot: a burst of noise through a low-pass filter, plus a click.
 export function shot() {
   const c = ensureCtx();
   if (!c) return;
@@ -68,13 +58,11 @@ export function shot() {
   blipTone(160, 0.06, 'square', 0.18, 60);
 }
 
-// The little chime when a job pays out.
 export function chime() {
   blipTone(880, 0.16, 'sine', 0.14);
   setTimeout(() => blipTone(1318, 0.24, 'sine', 0.12), 90);
 }
 
-// The engine: a sawtooth through a low-pass, whose pitch follows speed.
 export function engineStart() {
   const c = ensureCtx();
   if (!c || engineNodes) return;
@@ -108,7 +96,6 @@ export function engineStop() {
   engineNodes = null;
 }
 
-// The police siren: a sine that wails up and down on a slow LFO.
 export function sirenOn() {
   const c = ensureCtx();
   if (!c || sirenNodes) return;

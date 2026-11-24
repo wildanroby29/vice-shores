@@ -1,23 +1,9 @@
-// The police for Vice Shores: patrol cars, officers, roadblocks, and the
-// searchlight helicopter.
-//
-// The helicopter is the city's eye in the sky. Its body is white with
-// black stripes (Tem's change — the steel blue-grey is gone), a glass
-// canopy, a spinning main rotor with a translucent blur disc, a tail rotor,
-// skids, navigation lights and a double-blinking strobe, and a volumetric
-// searchlight cone with a pool of light on the ground under it. The beam is
-// deliberately dimmed: the old bright beam blew the hero's roof white.
-// Police cars steer toward the hero, drive when the wanted level is up, and
-// flash their light bars out of phase with each other.
-
 import { makePoliceCar, flashPolice } from './vehicles.js';
 import { makePerson } from './people.js';
 
-export const TACTICS = ['RAMMING', 'FLANKING', 'PIT', 'ROADBLOCK', 'SPOTLIGHT', 'PURSUIT'];
-export const UNIT_NAMES = ['UNIT 7', 'UNIT 12', 'UNIT 4', 'UNIT 21', 'UNIT 9', 'UNIT 15'];
+export const TACTICS = ['RAMMING', 'FLANKING', 'PIT', 'ROADBLOCK', 'SPOTLIGHT', 'PURSUIT', 'MARKSMAN', 'SHORE WATCH'];
+export const UNIT_NAMES = ['KITE-1', 'MARLIN-3', 'CORAL-48', 'TIDE-7', 'REEF-22', 'SURGE-9'];
 
-// Build a 2D side-profile shape, extrude it across a width, and rotate it
-// so the profile's length lands on +Z (front) and the extrusion on X.
 function extrudeProfile(points, width, bevel) {
   const shape = new THREE.Shape();
   shape.moveTo(points[0][0], points[0][1]);
@@ -72,12 +58,8 @@ void main() {
 }
 `;
 
-// The helicopter. White body, black cheatline and tail fin, glass canopy,
-// tail boom and rotor, skids, main rotor with a blur disc, a volumetric
-// searchlight, rim light, and red/green/white navigation lights.
 export function createHelicopter(scene) {
   const group = new THREE.Group();
-  // White body — Tem's change (23:08 WIB). The old steel blue-grey is gone.
   const bodyMat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.4, metalness: 0.4,
   });
@@ -91,7 +73,6 @@ export function createHelicopter(scene) {
   fuselage.castShadow = true;
   group.add(fuselage);
 
-  // Black cheatline along the fuselage, slightly wider than the body.
   const stripeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
   const cheatline = new THREE.Mesh(
     extrudeProfile(
@@ -101,13 +82,11 @@ export function createHelicopter(scene) {
     stripeMat,
   );
   group.add(cheatline);
-  // Black tail fin.
   const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.9), stripeMat);
   fin.position.set(0, 0.6, -5.5);
   fin.castShadow = true;
   group.add(fin);
 
-  // Glass canopy over the nose.
   const canopyMat = new THREE.MeshPhysicalMaterial({
     color: 0x0e1a24, roughness: 0.05, metalness: 0.1,
     clearcoat: 1, envMapIntensity: 1.1, transparent: true, opacity: 0.96,
@@ -118,7 +97,6 @@ export function createHelicopter(scene) {
   );
   group.add(canopy);
 
-  // Tail boom, tail rotor, skids.
   const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.3, 3.4, 10), bodyMat);
   boom.rotation.x = Math.PI / 2;
   boom.position.set(0, 0.1, -4.0);
@@ -146,7 +124,6 @@ export function createHelicopter(scene) {
     }
   }
 
-  // Main rotor: mast, two crossed blades, and a translucent blur disc.
   const mastMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.7, 8), mastMat);
   mast.position.y = 1.3;
@@ -169,8 +146,6 @@ export function createHelicopter(scene) {
   disc.position.y = 1.66;
   group.add(disc);
 
-  // The searchlight: a volumetric cone on a pivot (so it can aim), a pool
-  // of light on the ground, a real spotlight, and a glow at the lamp.
   const beamPivot = new THREE.Group();
   group.add(beamPivot);
   const beamMat = new THREE.ShaderMaterial({
@@ -206,8 +181,6 @@ export function createHelicopter(scene) {
   scene.add(spot);
   scene.add(spot.target);
 
-  // Rim light along the fuselage top, so the white body separates from a
-  // bright sky.
   const rimMat = new THREE.MeshStandardMaterial({
     color: 0xdfe8f2, emissive: 0xbcccdc, emissiveIntensity: 0.9, roughness: 0.5,
   });
@@ -215,7 +188,6 @@ export function createHelicopter(scene) {
   rim.position.set(0, 1.12, -0.2);
   group.add(rim);
 
-  // Navigation lights and the double-blinking strobe.
   const redNavMat = new THREE.MeshStandardMaterial({
     color: 0x550000, emissive: 0xff2020, emissiveIntensity: 3, roughness: 0.3,
   });
@@ -270,7 +242,6 @@ export function createHelicopter(scene) {
   function update(dt, time, heroPos) {
     rotor.rotation.y += 22 * dt;
     tailRotor.rotation.x += 30 * dt;
-    // Double-blink strobe: two quick flashes each second.
     const t = time % 1.0;
     const on = t < 0.08 || (t > 0.18 && t < 0.26);
     strobeMat.emissiveIntensity = on ? 6 : 0.4;
@@ -299,7 +270,6 @@ export function createHelicopter(scene) {
   };
 }
 
-// The police force: cars, officers and roadblocks, with a dispatch list.
 export function createPolice(scene, rng) {
   const cars = [];
   const officers = [];
@@ -359,7 +329,7 @@ export function createPolice(scene, rng) {
   }
 
   function dispatch(heroPos) {
-    return cars.slice(0, 3).map((c) => ({
+    return cars.slice(0, 6).map((c) => ({
       name: c.name,
       dist: Math.round(Math.hypot(c.group.position.x - heroPos.x, c.group.position.z - heroPos.z)),
       tactic: c.tactic,

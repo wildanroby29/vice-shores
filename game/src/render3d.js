@@ -1,17 +1,4 @@
-// The game itself for Vice Shores: the 3D scene, the cameras, driving and
-// walking, carjacking, shooting, the wanted system, missions, saves and the
-// garage shop.
-//
-// The scene is built once from the seeded stream — sky, lighting, city,
-// traffic, pedestrians, police and the helicopter — and then stepped in
-// fixed 1/60-second steps. The cameras are the heart of the look: a snapped
-// title-card shot over the boulevard, a low rolled chase shot, an
-// over-the-shoulder on-foot camera that puts Rook on the left third, and a
-// fixed pier camera. The hero is Rook, a driver working Marla's eight jobs;
-// the city answers with traffic, pedestrians, police cars, officers and a
-// searchlight helicopter, and the HUD reads everything through hudState().
-
-import { STEP, DAYTIME, PLAYER, WORLD, PAINT } from './config.js';
+import { STEP, DAYTIME, PLAYER, WORLD, PAINT, DISTRICTS, RADIO_LINES } from './config.js';
 import { createMissions } from './missions.js';
 import { createSky } from './render/sky.js';
 import { createLighting } from './render/lighting.js';
@@ -65,14 +52,12 @@ export function createGame(canvas, opts = {}) {
   const heli = createHelicopter(scene);
   const missions = createMissions();
 
-  // The hero GT and Rook.
   const heroCar = makeHeroCar();
   scene.add(heroCar.group);
   const rook = makeRook();
   scene.add(rook.group);
   let currentCar = heroCar;
 
-  // Sun glitter on the sea east of the pier.
   const glitterMat = new THREE.MeshBasicMaterial({
     color: 0xffb36b, transparent: true, opacity: 0.35,
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
@@ -82,7 +67,6 @@ export function createGame(canvas, opts = {}) {
   glitter.position.set(300, 0.12, 60);
   scene.add(glitter);
 
-  // The mission marker: a floating golden diamond and a faint beam.
   const markerMat = new THREE.MeshStandardMaterial({
     color: 0xffd94a, emissive: 0xffb020, emissiveIntensity: 1.4, roughness: 0.3,
   });
@@ -97,7 +81,6 @@ export function createGame(canvas, opts = {}) {
   markerBeam.position.set(60, 4, -60);
   scene.add(markerBeam);
 
-  // --- State ---------------------------------------------------------------
   let screen = 'title';
   let onFoot = false;
   let heading = -Math.PI / 2;
@@ -119,6 +102,7 @@ export function createGame(canvas, opts = {}) {
   let timeOfDay = 'golden';
   let toast = '';
   let toastTime = 0;
+  let prompt = '';
   const owned = new Set();
   const camPos = new THREE.Vector3(0, 10, 0);
   const camLook = new THREE.Vector3(0, 0, 0);
@@ -181,9 +165,32 @@ export function createGame(canvas, opts = {}) {
     dialogueTime = seconds;
   }
 
+  function setCondition(n) {
+    condition = Math.max(0, Math.min(100, n));
+  }
+
+  function setPrompt(text) {
+    prompt = text || '';
+  }
+
+  function progressState() {
+    const p = missions.progressData();
+    const done = missions.completed;
+    return {
+      districts: DISTRICTS,
+      collectibles: p.collectibles,
+      missions: p.missions,
+      career: p.career,
+      saves: listSaves(),
+      rankName: missions.rank,
+      rankXp: p.rankXp,
+      rankNextXp: p.rankNextXp,
+      overallPct: Math.round((done / 8) * 100),
+    };
+  }
+
   function enterCar() {
     if (onFoot) {
-      // Nearest traffic car within 5 m becomes the hero's ride.
       let best = null;
       let bestD = 5;
       for (const t of traffic) {
@@ -223,7 +230,6 @@ export function createGame(canvas, opts = {}) {
       }
       return;
     }
-    // Step out of the car.
     const g = currentCar.group;
     onFoot = true;
     rook.group.position.set(g.position.x + 2.5, 0, g.position.z + 1);
@@ -244,7 +250,6 @@ export function createGame(canvas, opts = {}) {
     const mx = hp.x + fx * 3;
     const mz = hp.z + fz * 3;
     effects.muzzle(mx, 1.4, mz);
-    // A police car ahead of the hero takes the hit.
     for (const car of police.cars) {
       const g = car.group;
       const dx = g.position.x - hp.x;
@@ -328,7 +333,6 @@ export function createGame(canvas, opts = {}) {
     return { ok: true, name: item.name };
   }
 
-  // --- Cameras -------------------------------------------------------------
   function updateCamera() {
     const hp = heroPos();
     const h = heading;
@@ -340,6 +344,10 @@ export function createGame(canvas, opts = {}) {
       const a = time * 0.05;
       camera.position.set(Math.cos(a) * 130, 55, Math.sin(a) * 130);
       camera.lookAt(0, 6, 0);
+      camera.fov = 62;
+    } else if (camMode === 'aerial') {
+      camera.position.set(40, 85, -80);
+      camera.lookAt(150, 0, 110);
       camera.fov = 62;
     } else if (camMode === 'titlecard') {
       camera.position.set(hp.x - fx * 8.5 + rx * 4.5, 3.0, hp.z - fz * 8.5 + rz * 4.5);
@@ -377,7 +385,6 @@ export function createGame(canvas, opts = {}) {
       camera.lookAt(v.x, v.y, v.z);
       camera.fov = v.fov || 50;
     } else {
-      // Play chase camera behind the car.
       const tx = hp.x - Math.sin(heading) * 11.5;
       const tz = hp.z - Math.cos(heading) * 11.5;
       if (!camReady) {
@@ -397,14 +404,11 @@ export function createGame(canvas, opts = {}) {
     camera.updateProjectionMatrix();
   }
 
-  // --- The step ------------------------------------------------------------
   function step(dt, input) {
     time += dt;
     const pressed = input ? input.takePressed() : 0;
 
     if (screen !== 'play') {
-      // Idle the world: traffic and pedestrians at 0.4x, effects, marker
-      // and boats keep moving, camera keeps updating.
       updateTraffic(traffic, dt * 0.4);
       updatePedestrians(peds, dt * 0.4, time);
       police.update(dt * 0.4, time, heroPos(), wanted);
@@ -432,7 +436,6 @@ export function createGame(canvas, opts = {}) {
     const steer = input ? input.steer : 0;
 
     if (onFoot) {
-      // Walking: turn, then step. Sprint with Shift.
       heading += steer * 2.6 * dt;
       const walkSpeed = input && input.sprint ? PLAYER.run : PLAYER.walk;
       const nx = rook.group.position.x + Math.sin(heading) * fwd * walkSpeed * dt;
@@ -455,7 +458,6 @@ export function createGame(canvas, opts = {}) {
       else rook.aim(false);
       if (pressed & 2) shoot();
     } else {
-      // Driving: accelerate, brake, drag, steer, collide.
       if (fwd > 0) speed += PLAYER.accel * dt;
       else if (fwd < 0) speed -= PLAYER.brake * dt;
       speed -= speed * 0.55 * dt;
@@ -474,14 +476,11 @@ export function createGame(canvas, opts = {}) {
         g.position.z = cz;
       }
       g.rotation.y = heading;
-      // A touch of body lean into the steering.
       g.rotation.z = -steer * 0.04 * Math.min(1, Math.abs(speed) / 20);
       for (const w of currentCar.wheels) w.rotation.x += (speed * dt) / 0.42;
-      // Nitro: a burst while Shift is held, if the tank is fitted.
       if (input && input.sprint && owned.has('nitro') && fwd > 0) {
         speed = Math.min(speed + 14 * dt, maxSpeed + 12);
       }
-      // Tyre smoke when drifting hard.
       if (Math.abs(steer) > 0.5 && Math.abs(speed) > 22 && Math.random() < 0.5) {
         effects.smoke(
           g.position.x - Math.sin(heading) * 2, 0.8, g.position.z - Math.cos(heading) * 2,
@@ -493,7 +492,6 @@ export function createGame(canvas, opts = {}) {
 
     if (pressed & 1) enterCar();
 
-    // Wanted decay: no police close by for 14 seconds drops a star.
     let near = false;
     for (const car of police.cars) {
       const d = Math.hypot(
@@ -523,7 +521,6 @@ export function createGame(canvas, opts = {}) {
       b.position.y = 0.1 + Math.sin(time * 0.8 + b.position.x) * 0.15;
       b.rotation.z = Math.sin(time * 0.6) * 0.02;
     }
-    // The sun follows the hero.
     lighting.setTime(timeOfDay, new THREE.Vector3(heroPos().x, 0, heroPos().z));
     checkMission();
     updateCamera();
@@ -548,7 +545,10 @@ export function createGame(canvas, opts = {}) {
       dispatch: police.dispatch(hp),
       dialogue,
       weapon: missions.weapon,
+      weapons: missions.weapons,
       radio: missions.radio,
+      radioLine: RADIO_LINES[Math.min(wanted, RADIO_LINES.length - 1)],
+      prompt,
       crew: missions.crew,
       toast: toastTime > 0 ? toast : '',
       map: {
@@ -584,7 +584,8 @@ export function createGame(canvas, opts = {}) {
     get camMode() { return camMode; },
     set camMode(v) { camMode = v; camReady = false; },
     assetView: null,
-    setTimeOfDay, setHero, setMission, setWanted, enterCar, shoot,
+    setTimeOfDay, setHero, setMission, setWanted, setCondition, setPrompt,
+    progressState, enterCar, shoot,
     checkMission, saveSlot, loadSlot, listSaves, buyUpgrade,
     step, render, resize, hudState,
     set aiming(v) { aiming = v; },

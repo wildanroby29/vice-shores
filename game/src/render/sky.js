@@ -1,15 +1,3 @@
-// The sky for Vice Shores: a gradient dome, a low sun with a halo, soft
-// clouds, fog, and an environment map baked from the sky itself so car
-// paint and window glass reflect the same sunset the player sees.
-//
-// The dome is a big sphere with a custom shader. Its colour blends three
-// preset colours by height — warm at the horizon, cooler overhead — and adds
-// a sun glow that is sharp near the sun's disc and soft further out. The
-// clouds are nine flat sprites drifting far away, faint at night. Fog hides
-// the far edge of the city. The environment map is rendered once per time
-// of day from a second dome in an empty scene, so reflections always match
-// the current sky.
-
 import { DAYTIME } from '../config.js';
 
 function radialTexture(inner, outer) {
@@ -48,7 +36,7 @@ void main() {
   vec3 col = mix(uBot, uMid, smoothstep(0.0, 0.22, h));
   col = mix(col, uTop, smoothstep(0.18, 0.65, h));
   float s = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);
-  col += uSunCol * (pow(s, 120.0) * 2.5 + pow(s, 18.0) * 0.7 + pow(s, 5.0) * 0.18);
+  col += uSunCol * (pow(s, 120.0) * 2.0 + pow(s, 18.0) * 0.35 + pow(s, 5.0) * 0.05);
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -71,8 +59,6 @@ export function createSky(scene, rng) {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
   scene.add(dome);
 
-  // Nine soft clouds, far out and high up. Their positions come from the
-  // seeded stream so the sky is the same for the same seed.
   const cloudTex = radialTexture('rgba(255,217,192,0.85)', 'rgba(255,217,192,0)');
   const clouds = [];
   for (let i = 0; i < 9; i++) {
@@ -95,8 +81,6 @@ export function createSky(scene, rng) {
   let envMap = null;
 
   function buildEnvironment(renderer) {
-    // Bake an environment map from the sky itself: a second dome in an
-    // empty scene, blurred a little, so paint and glass reflect this sky.
     const envScene = new THREE.Scene();
     const envDome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
     envScene.add(envDome);
