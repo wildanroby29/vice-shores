@@ -122,6 +122,11 @@ if (shotName) {
 
   let acc = 0;
   let last = performance.now();
+  // Keys pressed this frame, taken once by the play branch and handed to
+  // the first step() call: step() used to take the queue itself, after the
+  // play branch had already drained it, so E (enter/steal) and Space
+  // (shoot) never reached the game.
+  let pendingPress = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -136,6 +141,7 @@ if (shotName) {
       }
     } else if (game.screen === 'play') {
       const p = input.takePressed();
+      pendingPress = p;
       if (p & ACT.PAUSE) togglePause();
       if (p & ACT.MAP) {
         if (hud.mapOpen) hud.hideMap(); else hud.showMap();
@@ -178,7 +184,8 @@ if (shotName) {
 
     while (acc >= 1 / 60) {
       if (game.screen === 'title' || game.screen === 'play') {
-        game.step(1 / 60, input);
+        game.step(1 / 60, input, pendingPress);
+        pendingPress = 0;
       }
       acc -= 1 / 60;
     }

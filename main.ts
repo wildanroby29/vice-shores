@@ -13,7 +13,7 @@
 // /output (Node 22, standard library only):
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -34,9 +34,19 @@ const caps = {
 
 mkdirSync(outDir, { recursive: true });
 cpSync(join(repoRoot, 'game'), join(outDir, 'game'), { recursive: true });
+// The dossier ships exactly the shots listed in shots.json: copy only
+// those files, and fail loudly if one is missing or over the 256 KiB cap,
+// so a stale or oversized frame can never slip into the entry.
+const shotList = JSON.parse(readFileSync(join(repoRoot, 'shots.json'), 'utf8'));
 mkdirSync(join(outDir, 'screenshots'), { recursive: true });
-if (existsSync(join(repoRoot, 'screenshots'))) {
-  cpSync(join(repoRoot, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
+for (const shot of shotList) {
+  const src = join(repoRoot, 'screenshots', shot.name);
+  if (!existsSync(src)) throw new Error(`missing screenshot: ${shot.name}`);
+  const bytes = statSync(src).size;
+  if (bytes > caps.screenshots.max_bytes) {
+    throw new Error(`screenshot over 256 KiB: ${shot.name} (${bytes} bytes)`);
+  }
+  copyFileSync(src, join(outDir, 'screenshots', shot.name));
 }
 
 writeFileSync(join(outDir, 'dossier.json'), buildDossier(outDir, caps));

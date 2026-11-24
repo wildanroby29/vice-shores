@@ -62,6 +62,32 @@ export function createEffects(scene) {
     });
   }
 
+  // Faint ground haze: a wide, flat, barely-there warm disc that sits
+  // under the hero car in the chase shot so the car reads as grounded
+  // in dusty golden-hour air instead of floating on clean asphalt.
+  function haze(x, z, opts = {}) {
+    const size = opts.size ?? 7;
+    const opacity = opts.opacity ?? 0.10;
+    const life = opts.life ?? 3;
+    const mat = new THREE.MeshBasicMaterial({
+      map: smokeTex, color: 0xe8dcc8, transparent: true, opacity,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 0.6), mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.15, z);
+    mesh.renderOrder = 0;
+    scene.add(mesh);
+    add({
+      mesh, age: 0, life,
+      tick(dt) {
+        this.age += dt;
+        mat.opacity = opacity * (this.age > life - 0.5
+          ? Math.max(0, (life - this.age) / 0.5) : 1);
+      },
+    });
+  }
+
   // A short additive flame, used when a police car takes a hit.
   function flame(x, y, z, size) {
     const mat = new THREE.SpriteMaterial({
@@ -165,5 +191,5 @@ export function createEffects(scene) {
     }
   }
 
-  return { smoke, flame, muzzle, tracer, sparks, update };
+  return { smoke, flame, muzzle, tracer, sparks, haze, update };
 }

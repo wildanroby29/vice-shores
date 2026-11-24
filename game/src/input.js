@@ -59,15 +59,19 @@ export function createInput() {
     held.delete(code);
   }
 
-  window.addEventListener('keydown', onDown);
-  window.addEventListener('keyup', onUp);
-  window.addEventListener('blur', () => {
+  // Named so detach() can remove it: the anonymous version could never
+  // be unregistered, so a detached input kept clearing state on blur.
+  function onBlur() {
     held.clear();
     shiftHeld = false;
     // Drop anything queued while the window was unfocused, so a key
     // pressed just before alt-tabbing does not fire on the way back.
     queued = 0;
-  });
+  }
+
+  window.addEventListener('keydown', onDown);
+  window.addEventListener('keyup', onUp);
+  window.addEventListener('blur', onBlur);
 
   function down(...codes) {
     return codes.some((c) => held.has(c));
@@ -94,6 +98,7 @@ export function createInput() {
     detach() {
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
     },
   };
 }

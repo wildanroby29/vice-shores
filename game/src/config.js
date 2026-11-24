@@ -147,6 +147,21 @@ export const ABILITIES = [
   { name: 'Eyes Out', role: 'Cop radar', crew: 'Lena' },
 ];
 
+// Chase-shot tuning: the helicopter beam and the ground haze under the
+// hero car. The beam cone is wide enough to read as a searchlight across
+// the frame (radius 2.6 at the hero), and the haze is a wide, very faint
+// warm disc that grounds the hero car without fogging the road.
+export const BEAM = {
+  radius: 2.6,
+  poolRadius: 2.4,
+};
+
+export const HAZE = {
+  size: 7,
+  opacity: 0.10,
+  life: 3,
+};
+
 // The dispatch roster for a four-star chase: six named units, each with a
 // fixed tactic, so the HUD reads like a real police board instead of a
 // random list. The order here is the order the panel shows them.

@@ -1,3 +1,5 @@
+import { blobShadow } from './render/lighting.js';
+
 export const TRAFFIC_COLOURS = [
   0xc23a2e, 0x2e6ac2, 0xe8b83a, 0x3a9a5a,
   0xeeeeee, 0x222222, 0x7a3aa8, 0xe87a3a,
@@ -69,7 +71,9 @@ export function makeCar(colour, opts = {}) {
 
   const paintMat = new THREE.MeshPhysicalMaterial({
     color: colour, roughness: 0.6, metalness: 0.05,
-    clearcoat: 0, clearcoatRoughness: 0.5, envMapIntensity: 0.2,
+    // The clearcoat option was hardcoded to 0, so the hero car's 0.45
+    // never applied; it does now, and the GT's paint catches the sun.
+    clearcoat, clearcoatRoughness: 0.5, envMapIntensity: 0.2,
   });
 
   if (detail !== 'full') {
@@ -174,16 +178,7 @@ export function makeHeroCar() {
   car.group.position.set(150, 0, -20);
   // Contact shadow under the hero car: faint (0.07) so it grounds the car
   // without painting a grey puddle on the asphalt.
-  const shadowGeo = new THREE.CircleGeometry(1, 24);
-  const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0x000000, transparent: true, opacity: 0.07, depthWrite: false,
-  });
-  const shadow = new THREE.Mesh(shadowGeo, shadowMat);
-  shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = 0.02;
-  shadow.scale.set(1.0, 2.0, 1);
-  shadow.renderOrder = 1;
-  car.group.add(shadow);
+  car.group.add(blobShadow(1.0, 2.0, 0.07));
   return car;
 }
 

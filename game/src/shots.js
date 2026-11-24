@@ -12,7 +12,7 @@
 import { scriptedInput } from './input.js';
 import { makeRng } from './random.js';
 import { buildMarket } from './market.js';
-import { DISPATCH_ROSTER } from './config.js';
+import { DISPATCH_ROSTER, HAZE } from './config.js';
 
 const IDLE = scriptedInput('IDLE');
 const DRIVE = scriptedInput('DRIVE');
@@ -113,8 +113,15 @@ function stageChase(game) {
     game.police.cars[i].name = DISPATCH_ROSTER[i].name;
     game.police.cars[i].tactic = DISPATCH_ROSTER[i].tactic;
   }
-  game.heli.setHold(hp.x - 5, 10, hp.z - 15);
+  // The helicopter holds further out and higher than before, so its
+  // beam is a long diagonal cone across the frame — from the upper left
+  // down onto the hero — instead of a short steep shaft hidden behind
+  // the fuselage.
+  game.heli.setHold(hp.x - 10, 18, hp.z - 26);
   game.heli.aimAt({ x: hp.x, y: 0, z: hp.z });
+  // Faint haze under the hero car: a wide warm disc at ground level so
+  // the GT reads as sitting in dusty golden-hour air, not on bare asphalt.
+  game.fx.haze(hp.x, hp.z, HAZE);
   // Small skid smoke, no longer than the car, already thinning.
   const puffs = [
     [hp.x - 2, hp.z + 4, 1.3], [hp.x + 2, hp.z + 4, 1.5], [hp.x, hp.z - 3, 1.8],

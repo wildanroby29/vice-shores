@@ -10,6 +10,23 @@
 
 import { DAYTIME } from '../config.js';
 
+// A soft elliptical contact shadow. The caller picks the opacity: hero
+// cars use a faint one (0.07) so the asphalt still reads through it.
+// Module-level so vehicles can use it directly without a lighting instance.
+export function blobShadow(scaleX, scaleZ, opacity) {
+  const geo = new THREE.CircleGeometry(1, 24);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x000000, transparent: true, opacity,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.02;
+  mesh.scale.set(scaleX, scaleZ, 1);
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
 export function createLighting(scene, renderer) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -70,22 +87,6 @@ export function createLighting(scene, renderer) {
     scene.background = new THREE.Color(0x9a9a9a);
     scene.environment = null;
     scene.fog = null;
-  }
-
-  // A soft elliptical contact shadow. The caller picks the opacity: hero
-  // cars use a faint one (0.07) so the asphalt still reads through it.
-  function blobShadow(scaleX, scaleZ, opacity) {
-    const geo = new THREE.CircleGeometry(1, 24);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0x000000, transparent: true, opacity,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = 0.02;
-    mesh.scale.set(scaleX, scaleZ, 1);
-    mesh.renderOrder = 1;
-    return mesh;
   }
 
   return { sun, hemi, fill, setTime, setFlat, blobShadow };

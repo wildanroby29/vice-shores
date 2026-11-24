@@ -1,3 +1,5 @@
+import { pickOne, int } from './random.js';
+
 export const SKINS = [0xe8b88a, 0xc98a5a, 0x8a5a3a, 0xf2c9a0, 0x6b4226];
 export const SHIRTS = [
   0x3a6ac2, 0xc23a5a, 0x3a9a5a, 0xe8b83a,
@@ -247,11 +249,11 @@ export function makeRook() {
 export function makePedestrians(rng) {
   const peds = [];
   for (let i = 0; i < 26; i++) {
-    const skin = SKINS[Math.floor(rng() * SKINS.length)];
-    const shirt = SHIRTS[Math.floor(rng() * SHIRTS.length)];
-    const pants = PANTS[Math.floor(rng() * PANTS.length)];
-    const hair = HAIRS[Math.floor(rng() * HAIRS.length)];
-    const hairStyle = Math.floor(rng() * 4);
+    const skin = pickOne(rng, SKINS);
+    const shirt = pickOne(rng, SHIRTS);
+    const pants = pickOne(rng, PANTS);
+    const hair = pickOne(rng, HAIRS);
+    const hairStyle = int(rng, 0, 4);
     const scale = 0.92 + rng() * 0.16;
     const x = -190 + rng() * 340;
     const z = -190 + rng() * 380;

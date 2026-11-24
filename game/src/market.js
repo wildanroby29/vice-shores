@@ -1,3 +1,5 @@
+import { range } from './random.js';
+
 function radialTex(inner, outer) {
   const c = document.createElement('canvas');
   c.width = 64;
@@ -153,7 +155,7 @@ export function buildMarket(rng) {
       map: bokehTex, color: 0xffd98a, opacity: 0.22 + rng() * 0.2, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    const s = 0.8 + rng() * 1.6;
+    const s = range(rng, 0.8, 2.4);
     b.scale.set(s, s, 1);
     b.position.set(baseX - 2 - rng() * 12, 2.5 + rng() * 3.5, baseZ - 2 + rng() * 34);
     group.add(b);
@@ -161,6 +163,14 @@ export function buildMarket(rng) {
   const crateMat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.9 });
   const crateSpots = [[baseX - 1, baseZ - 6], [baseX + 1, baseZ - 6.5], [baseX - 1, baseZ + 34], [baseX + 1, baseZ + 34.5]];
   for (const [cx, cz] of crateSpots) {
+    group.add(box(0.8, 0.8, 0.8, crateMat, cx, 0.4, cz));
+    group.add(box(0.6, 0.6, 0.6, crateMat, cx + 0.2, 1.1, cz));
+  }
+  // Two more crate stacks mid-market for cover depth in the firefight
+  // frame: knee-high, so they read as street clutter, never as a wall
+  // in front of the camera.
+  const extraCrates = [[baseX - 2, baseZ + 28], [baseX + 4, baseZ + 14]];
+  for (const [cx, cz] of extraCrates) {
     group.add(box(0.8, 0.8, 0.8, crateMat, cx, 0.4, cz));
     group.add(box(0.6, 0.6, 0.6, crateMat, cx + 0.2, 1.1, cz));
   }

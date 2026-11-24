@@ -30,7 +30,10 @@ library is three.js, vendored under `game/vendor/`.
   (Marla, Dex, Lena), three radio stations, three weapons, and a garage shop
   (Vice Customs) with six upgrades.
 - A HUD with a minimap and a full map, mission objective, wanted stars,
-  dispatch list, money and clock, health and armour, and save slots.
+  dispatch list, money and clock, health and armour, and save slots — plus
+  a rank card with an XP bar to the next rank, four weapon slots with ammo,
+  three crew ability cards with key chips, and a dialogue subtitle with a
+  speaker chip.
 - A title screen that slowly orbits the city at golden hour, and a night
   market with striped stalls, paper lanterns and string lights where the
   on-foot firefight happens.
@@ -56,6 +59,12 @@ library is three.js, vendored under `game/vendor/`.
 The three screenshots in `screenshots/` are real renders of the game itself:
 the title card over the city at golden hour (slow aerial orbit), a four-star
 police chase on the boulevard, and a firefight on foot in the night market.
+
+Round 15 (Nov 24) re-verified the three shots against the spec: the rank XP
+bar now names the next rank, the on-foot prompt clears the ability cards, the
+helicopter holds further out so its searchlight beam reads across the chase
+frame, faint haze grounds the hero car, and keyboard E/Space now reach the
+game (they were swallowed by a double take of the input queue).
 
 ## Tech
 

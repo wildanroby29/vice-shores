@@ -38,6 +38,13 @@ export function blip() {
   blipTone(660, 0.09, 'sine', 0.12, 880);
 }
 
+// Short two-tone dispatch chirp when the wanted level rises: a radio
+// blip, not a siren, so a new star reads as the dispatcher reacting.
+export function chirp() {
+  blipTone(880, 0.07, 'square', 0.08, 660);
+  setTimeout(() => blipTone(660, 0.09, 'square', 0.08, 880), 70);
+}
+
 export function shot() {
   const c = ensureCtx();
   if (!c) return;

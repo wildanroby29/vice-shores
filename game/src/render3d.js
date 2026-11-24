@@ -151,7 +151,9 @@ export function createGame(canvas, opts = {}) {
   }
 
   function setWanted(n) {
+    const prev = wanted;
     wanted = Math.max(0, Math.min(5, n));
+    if (wanted > prev && audio) audio.chirp();
     if (wanted >= 3 && audio) audio.sirenOn();
     else if (audio) audio.sirenOff();
     const hp = heroPos();
@@ -273,7 +275,7 @@ export function createGame(canvas, opts = {}) {
     const hp = heroPos();
     if (Math.hypot(hp.x - t[0], hp.z - t[1]) < 12) {
       const { job, finishedAll } = missions.complete();
-      if (audio) audio.chime();
+      if (audio) audio.pickup();
       say(`Marla: "Job done. $${job.reward} is yours."`, 5);
       if (finishedAll) say('Marla: "That\'s all eight, Rook. You run this city now."', 6);
       setMission(missions.index);
@@ -413,9 +415,12 @@ export function createGame(canvas, opts = {}) {
     camera.updateProjectionMatrix();
   }
 
-  function step(dt, input) {
+  function step(dt, input, pressedArg) {
     time += dt;
-    const pressed = input ? input.takePressed() : 0;
+    // Pressed keys come in from the caller when it already took the
+    // queue (main.js takes it once per frame); otherwise take it here,
+    // so E/Space are never swallowed by a double take.
+    const pressed = pressedArg ?? (input ? input.takePressed() : 0);
 
     if (screen !== 'play') {
       updateTraffic(traffic, dt * 0.4);
@@ -550,6 +555,7 @@ export function createGame(canvas, opts = {}) {
       health,
       armour,
       rank: missions.rank,
+      nextRank: missions.nextRank,
       progress: missions.progress,
       dispatch: police.dispatch(hp),
       dialogue,

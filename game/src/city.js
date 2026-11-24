@@ -533,7 +533,10 @@ export function buildCity(rng) {
   const whiteMat = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false,
   });
-  for (const cx of [-120, -60, 60, 120]) {
+  // Crosswalks at every boulevard crossing, including the centre one at
+  // x = 0: the chase camera looks straight down the boulevard, and the
+  // centre stripes give the road ahead foreground depth.
+  for (const cx of [-120, -60, 0, 60, 120]) {
     for (let s = 0; s < 7; s++) {
       const stripe = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 1.1), whiteMat);
       stripe.rotation.x = -Math.PI / 2;

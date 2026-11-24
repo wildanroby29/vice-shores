@@ -93,6 +93,23 @@ export function createSky(scene, rng) {
     scene.add(spr);
     clouds.push(spr);
   }
+  // Four more wide, low clouds on the horizon for the title frame: the
+  // aerial shot looks across the city, and a bare red sky above the
+  // rooftops reads flat — low haze clouds give the horizon depth.
+  for (let i = 0; i < 4; i++) {
+    const ang = rng() * Math.PI * 2;
+    const radius = 450 + rng() * 200;
+    const height = 55 + rng() * 20;
+    const op = 0.25 + rng() * 0.1;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: cloudTex, color: 0xffd9c0, opacity: op, depthWrite: false,
+    }));
+    spr.position.set(Math.cos(ang) * radius, height, Math.sin(ang) * radius);
+    spr.scale.set(180 + rng() * 80, 18 + rng() * 6, 1);
+    spr.userData.baseOpacity = op;
+    scene.add(spr);
+    clouds.push(spr);
+  }
 
   let envMap = null;
 

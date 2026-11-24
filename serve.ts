@@ -73,3 +73,15 @@ const server = createServer(async (req, res) => {
 server.listen(port, '127.0.0.1', () => {
   console.log(`game/ is on http://localhost:${port}`);
 });
+
+// A busy port fails fast with a readable message instead of a bare
+// EADDRINUSE stack: the screenshot runner needs this server up, and a
+// stale server on :8080 is the usual reason it is not.
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`port ${port} is already in use — stop the other server or pass --port=N`);
+  } else {
+    console.error(err);
+  }
+  process.exit(1);
+});

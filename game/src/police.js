@@ -1,5 +1,6 @@
 import { makePoliceCar, flashPolice } from './vehicles.js';
 import { makePerson } from './people.js';
+import { BEAM } from './config.js';
 
 export const TACTICS = ['RAMMING', 'FLANKING', 'PIT', 'ROADBLOCK', 'SPOTLIGHT', 'PURSUIT', 'MARKSMAN', 'SHORE WATCH'];
 export const UNIT_NAMES = ['KITE-1', 'MARLIN-3', 'CORAL-48', 'TIDE-7', 'REEF-22', 'SURGE-9'];
@@ -60,8 +61,10 @@ void main() {
 
 export function createHelicopter(scene) {
   const group = new THREE.Group();
+  // The white fuselage keeps a low env-map intensity so the paint stays
+  // white at golden hour instead of blowing out to a featureless blob.
   const bodyMat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff, roughness: 0.4, metalness: 0.4,
+    color: 0xffffff, roughness: 0.4, metalness: 0.4, envMapIntensity: 0.55,
   });
   const fuselage = new THREE.Mesh(
     extrudeProfile(
@@ -162,7 +165,10 @@ export function createHelicopter(scene) {
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 34, 20, 1, true), beamMat);
+  // The searchlight cone is wide (BEAM.radius) so the beam reads as a
+  // shaft of light across the frame, not a thin line, and the pool it
+  // throws on the road is wide enough to anchor the hero car.
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(BEAM.radius, 34, 20, 1, true), beamMat);
   cone.position.y = -17;
   beamPivot.add(cone);
   const glowTex = radialTexture();
@@ -178,7 +184,7 @@ export function createHelicopter(scene) {
     color: 0xfff2c8, transparent: true, opacity: 0.25,
     blending: THREE.AdditiveBlending, depthWrite: false,
   });
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(2.0, 24), poolMat);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(BEAM.poolRadius, 24), poolMat);
   pool.rotation.x = -Math.PI / 2;
   scene.add(pool);
 

@@ -64,9 +64,10 @@ const CSS = `
 #crew .ability .ar { font-size: 10.5px; opacity: 0.85; line-height: 1.15; }
 #subtitle { position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%); max-width: 640px; display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 15px; font-weight: 600; text-align: left; }
 #subtitle .portrait { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; color: #0d1526; border: 2px solid rgba(255,255,255,0.7); flex: 0 0 auto; }
+#subtitle .spk { width: 26px; height: 26px; border-radius: 50%; background: #ffd94a; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 #subtitle .who { font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #ffd166; }
 #subtitle .line { font-size: 15px; font-weight: 600; line-height: 1.35; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
-#prompt { position: absolute; left: 50%; bottom: 190px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 14px; font-weight: 700; }
+#prompt { position: absolute; left: 50%; bottom: 238px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 14px; font-weight: 700; }
 #prompt .key { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px; background: #ffd94a; color: #1a0e08; font-weight: 900; font-size: 14px; }
 #toast { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); padding: 9px 18px; font-size: 14px; font-weight: 700; display: none; }
 #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 5; background: radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,0.35) 100%); }
@@ -174,6 +175,12 @@ function keyChipHtml(crewName) {
   const c = CREW.find((x) => x.name === crewName) || CREW[0];
   const col = PORTRAIT_COLOURS[c.name] || '#b9b4a8';
   return `<span class="keychip" style="background:${col}">${c.key}</span>`;
+}
+
+// Speaker chip for the subtitle: a small speaker glyph in a yellow chip
+// so the dialogue line reads as someone speaking, not floating text.
+function speakerChipHtml() {
+  return `<span class="spk" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d1526" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" fill="#0d1526" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></span>`;
 }
 
 function drawMap(ctx, W, H, st) {
@@ -471,7 +478,10 @@ export function createHud() {
       barFill.style.width = `${(st.missionDone / 8) * 100}%`;
       rank.style.top = `${objective.offsetTop + objective.offsetHeight + 8}px`;
       const xpPct = Math.round((st.missionDone / 8) * 100);
-      rank.innerHTML = `RANK: ${st.rank} · ${st.progress}<div class="xpbar"><i style="width:${xpPct}%"></i></div><div class="xpnum">${st.missionDone * 1250} / ${(st.missionDone + 1) * 1250} XP · ${xpPct}% TO ${st.rank}</div>`;
+      // The XP bar names the NEXT rank on the ladder ("0% TO HUSTLER"),
+      // never the rank already held — "0% TO NOBODY" reads as a bug.
+      const nextRankName = st.nextRank ? st.nextRank.name : st.rank;
+      rank.innerHTML = `RANK: ${st.rank} · ${st.progress}<div class="xpbar"><i style="width:${xpPct}%"></i></div><div class="xpnum">${st.missionDone * 1250} / ${(st.missionDone + 1) * 1250} XP · ${xpPct}% TO ${nextRankName}</div>`;
       let starHtml = '';
       for (let i = 0; i < 5; i++) {
         starHtml += i < st.wanted ? '★' : '<span class="dim">★</span>';
@@ -502,7 +512,7 @@ export function createHud() {
         const m = st.dialogue.match(/^([^:]+):\s*"?([\s\S]*?)"?\s*$/);
         const who = m ? m[1].trim() : 'ROOK';
         const line = m ? m[2] : st.dialogue;
-        subtitle.innerHTML = `${portraitHtml(who, 34)}<span><span class="who">${who.toUpperCase()}</span><br><span class="line">${line}</span></span>`;
+        subtitle.innerHTML = `${portraitHtml(who, 34)}${speakerChipHtml()}<span><span class="who">${who.toUpperCase()}</span><br><span class="line">${line}</span></span>`;
         subtitle.style.display = 'flex';
       } else {
         subtitle.style.display = 'none';

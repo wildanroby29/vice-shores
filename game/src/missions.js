@@ -60,7 +60,7 @@ export function createMissions() {
       return nextRank();
     },
     get progress() {
-      return `${done}/8`;
+      return `${done}/${JOBS.length}`;
     },
     get weapon() {
       return { ...WEAPONS[weaponSlot], ammo: ammoLeft[weaponSlot] };

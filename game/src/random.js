@@ -17,6 +17,11 @@ export function range(rng, min, max) {
   return min + rng() * (max - min);
 }
 
+// Integer in [min, max): the ped randomiser's hair-style and slot picks.
+export function int(rng, min, max) {
+  return min + Math.floor(rng() * (max - min));
+}
+
 // Fisher-Yates shuffle that returns a new array, leaving the input
 // untouched — used wherever a list (radio order, spawn order) should be
 // dealt out in a fresh order each run without mutating the source.
