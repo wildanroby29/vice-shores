@@ -174,7 +174,7 @@ export function makeHeroCar() {
   car.group.position.set(150, 0, -20);
   const shadowGeo = new THREE.CircleGeometry(1, 24);
   const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0x000000, transparent: true, opacity: 0.07, depthWrite: false,
+    color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false,
   });
   const shadow = new THREE.Mesh(shadowGeo, shadowMat);
   shadow.rotation.x = -Math.PI / 2;

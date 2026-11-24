@@ -138,7 +138,7 @@ export function createHelicopter(scene) {
   }
   group.add(rotor);
   const discMat = new THREE.MeshBasicMaterial({
-    color: 0x8a8a8a, transparent: true, opacity: 0.10,
+    color: 0xaaaaaa, transparent: true, opacity: 0.18,
     side: THREE.DoubleSide, depthWrite: false,
   });
   const disc = new THREE.Mesh(new THREE.CircleGeometry(4.5, 32), discMat);

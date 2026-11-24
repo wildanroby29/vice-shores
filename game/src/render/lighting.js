@@ -45,7 +45,7 @@ export function createLighting(scene, renderer) {
     sun.intensity = preset.sunStrength;
     hemi.intensity = preset.hemiStrength;
     fill.intensity = isNight ? 1.0 : 0.35;
-    renderer.toneMappingExposure = 1.15 * (preset.exposure ?? 1);
+    renderer.toneMappingExposure = 1.15;
     return { dir, isNight };
   }
 
